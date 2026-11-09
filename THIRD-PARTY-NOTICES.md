@@ -34,3 +34,6 @@ the vendored files.
 
 `web/assets/DAFEIYU-LICENSE.txt` carries the project-level MIT notice for
 the visualization app.
+
+This package bundles the following third-party assets under `web/assets/`.
+They are NOT covered by the MIT license above.
