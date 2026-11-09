@@ -1,0 +1,51 @@
+/* 忆核大脑 · design tokens
+   颜色取自 design-reference.png 实采样（见 docs/design-spec.md） */
+:root {
+  color-scheme: dark;
+
+  --bg: #000000;
+  --chrome: #040c15;
+  --chrome-deep: #030a12;
+  --panel: #040e16;
+  --panel-hi: #051019;
+  --panel-soft: #07131f;
+
+  --line: rgba(88, 140, 176, 0.16);
+  --line-soft: rgba(88, 140, 176, 0.10);
+  --line-strong: rgba(94, 231, 242, 0.34);
+  --hair: rgba(220, 240, 255, 0.10);
+
+  --text: #f4f9fc;
+  --text-2: #a9bccd;
+  --text-3: #7e95a8;
+  --text-4: #61788b;
+
+  --cyan: #5ee7f2;
+  --cyan-2: #34d3e2;
+  --cyan-soft: rgba(94, 231, 242, 0.12);
+  --cyan-glow: rgba(94, 231, 242, 0.42);
+  --amber: #f6b954;
+  --amber-soft: rgba(246, 185, 84, 0.45);
+  --violet: #ad74ff;
+  --violet-soft: rgba(173, 116, 255, 0.45);
+
+  --btn: #0a1a27;
+  --btn-hi: #0d2434;
+  --btn-line: rgba(96, 160, 194, 0.24);
+  --btn-line-hi: rgba(94, 231, 242, 0.42);
+
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", sans-serif;
+  --font-mono: "SFMono-Regular", "JetBrains Mono", "Roboto Mono", Consolas, monospace;
+
+  --topbar-h: 64px;
+  --bottom-h: 79px;
+  --left-w: 260px;
+  --right-w: 330px;
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}

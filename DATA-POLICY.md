@@ -1,0 +1,39 @@
+# 数据与隐私政策（Data Policy）
+
+本项目采用 **代码开源、数据不开源** 的方式。
+
+## 1. 什么开源
+
+- `lib/`、`web/src/`、`web/styles/`、`tests/`、`tools/`、`docs/` 等源代码与文档。
+- 完全合成的样例数据：`web/data/sample-payload.json`、`tools/seed-sample.mjs` 生成的内容。
+- 第三方前端资源遵守各自许可证（Three.js、皮层网格等），见 `web/assets/*LICENSE*`。
+
+## 2. 什么不开源
+
+以下内容**不进入本仓库、不随 npm 包分发**：
+
+- `web/data/payload.json`、`demo.json`、`rules.json`、`loop.db` 及 WAL/SHM/备份；
+- 任何真实对话、记忆、规则、本体实例、审计/反馈/任务记录；
+- `corpus/` 下的工作区语料；
+- 本地截图、设计参考图、构建产物、依赖目录。
+
+仓库的 `.gitignore` / `.npmignore` 会排除这些路径；如果你 fork 本项目，请保持这些规则，
+不要把生产数据提交到公开仓库。
+
+## 3. 本机数据如何流动
+
+- 闭环数据默认写入本机 `web/data/loop.db`（SQLite）。
+- 抽取模型与 embedding 端点需要显式配置；未配置时不会调用，也没有默认云端外传。
+- 向量检索只发送单条记忆文本/查询文本到显式配置的 embedding 端点，不发送完整历史。
+- 敏感记忆默认不进入上下文；审计记录不写原始敏感文本。
+- 本项目不含遥测/统计上报。
+
+## 4. 样例数据
+
+`web/data/sample-payload.json` 与 `tools/seed-sample.mjs` 的内容为人工编造，
+仅用于演示界面，不来自任何真实用户或生产系统。可以自由复制、修改、分发。
+
+## 5. 责任边界
+
+本项目是单用户本地工具，不构成多租户安全边界；不要把不同信任域的数据写入同一
+`owner`，也不要在未评估模型/embedding 服务数据政策的情况下发送敏感内容。

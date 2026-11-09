@@ -1,0 +1,16 @@
+# 本地运行时数据与杂物；发布内容主要由 package.json 的 files 白名单决定
+web/data/payload.json
+web/data/payload.mock.json
+web/data/demo.json
+web/data/rules.json
+web/data/loop.db
+web/data/loop.db-shm
+web/data/loop.db-wal
+web/data/loop.db.bak-*
+web/data/loop-verify.db*
+shots/
+dist/
+*.tgz
+*.log
+node_modules/
+web/src/brain/probe-*.mjs

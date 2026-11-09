@@ -1,0 +1,95 @@
+{
+  "name": "@dafeiyu/dsh-memory-brain",
+  "version": "0.0.1",
+  "private": false,
+  "type": "module",
+  "description": "忆核大脑（Memory Brain）：DeepSeek Harness 内的本地优先记忆闭环插件（对话→记忆→本体→规则→上下文→反馈）。",
+  "license": "MIT",
+  "author": "dafeiyu",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/rules.js",
+    "lib/loop.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "PUBLISHING.md",
+    "LICENSE",
+    "corpus/README.md",
+    "web/index.html",
+    "web/styles/**",
+    "web/src/**",
+    "web/assets/**",
+    "docs/memory-loop.md",
+    "docs/loop-api-v2.md",
+    "docs/verification-v3.md",
+    "web/data/sample-payload.json",
+    "web/data/README.md",
+    "docs/software-description.md",
+    "DATA-POLICY.md"
+  ],
+  "scripts": {
+    "check": "node --check lib/index.js && node --check lib/client.js",
+    "prepack": "node --check lib/index.js && node --check lib/client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "deepseek-harness",
+    "memory",
+    "ontology",
+    "rules",
+    "sqlite",
+    "local-first"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wenxinzhang/dsh-memory-brain.git"
+  },
+  "homepage": "https://github.com/wenxinzhang/dsh-memory-brain#readme",
+  "bugs": {
+    "url": "https://github.com/wenxinzhang/dsh-memory-brain/issues"
+  }
+}

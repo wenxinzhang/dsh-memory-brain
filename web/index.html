@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>忆核大脑 · Memory Brain</title>
+<link rel="stylesheet" href="./styles/tokens.css">
+<link rel="stylesheet" href="./styles/layout.css">
+<link rel="stylesheet" href="./styles/chrome.css">
+<link rel="stylesheet" href="./styles/left.css">
+<link rel="stylesheet" href="./styles/right.css">
+<link rel="stylesheet" href="./styles/rules.css">
+<link rel="stylesheet" href="./styles/loop.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/three/build/three.module.js",
+    "three/addons/": "./assets/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <header id="topbar"></header>
+  <aside id="panel-left" aria-label="本地记忆核心"></aside>
+  <main id="stage" aria-label="记忆皮层">
+    <canvas id="cortex-canvas" aria-label="记忆皮层三维视图"></canvas>
+    <div id="stage-glow" aria-hidden="true"></div>
+    <div class="stage-eyebrow" aria-hidden="true"><i></i><span>MEMORY CORTEX</span><i></i></div>
+    <div class="stage-caption" aria-hidden="true">思考有记忆 · 启发有出处 · 推理成体系</div>
+    <div id="model-loading"><span class="ml-ring"></span><span class="ml-text">正在加载记忆皮层…</span></div>
+    <div id="boot-error" hidden></div>
+    <div id="node-card" hidden></div>
+  </main>
+  <aside id="panel-right" aria-label="记忆运行状态"></aside>
+  <footer id="bottombar"></footer>
+
+  <div id="overlay-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+</div>
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>

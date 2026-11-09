@@ -1,0 +1,286 @@
+/* layout.css — 页面骨架、栅格、舞台与共享排版 */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html,
+body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+button,
+input,
+select { font: inherit; color: inherit; }
+
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.55; }
+
+:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+::selection { background: rgba(94, 231, 242, 0.26); }
+
+/* 滚动条：细、暗、只在悬停时明显一点 */
+* { scrollbar-width: thin; scrollbar-color: rgba(92, 140, 170, 0.28) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb { background: rgba(92, 140, 170, 0.28); border-radius: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+#app {
+  display: grid;
+  grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w);
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--bottom-h);
+  grid-template-areas:
+    "top top top"
+    "left stage right"
+    "bottom bottom bottom";
+  width: 100%;
+  height: 100dvh;
+  min-height: 460px;
+  background: var(--bg);
+}
+
+#topbar { grid-area: top; }
+#panel-left { grid-area: left; }
+#stage { grid-area: stage; }
+#panel-right { grid-area: right; }
+#bottombar { grid-area: bottom; }
+
+/* ------------------------------------------------------------ stage */
+#stage {
+  position: relative;
+  z-index: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+  isolation: isolate;
+}
+
+#cortex-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  filter: brightness(1.02) contrast(1.18) saturate(1.50);
+}
+
+#stage-glow {
+  position: absolute;
+  left: calc(50% + (var(--right-w) - var(--left-w)) / 2);
+  bottom: 52px;
+  z-index: 2;
+  width: min(320px, 48%);
+  height: 170px;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    closest-side,
+    rgba(22, 168, 198, 0.52) 0%,
+    rgba(14, 120, 155, 0.22) 46%,
+    rgba(7, 70, 100, 0) 74%
+  );
+  filter: blur(12px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.stage-eyebrow {
+  position: absolute;
+  top: 14px;
+  left: calc(50% + (var(--right-w) - var(--left-w)) / 2);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transform: translateX(-50%);
+  color: #b7c4cf;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 2.35px;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+.stage-eyebrow i {
+  display: block;
+  width: 27px;
+  height: 2px;
+  background: rgba(170, 190, 204, 0.42);
+}
+
+.stage-caption {
+  position: absolute;
+  bottom: 38px;
+  left: calc(50% + (var(--right-w) - var(--left-w)) / 2);
+  z-index: 3;
+  transform: translateX(-50%);
+  color: #a8b3bf;
+  font-size: 14px;
+  letter-spacing: 1.8px;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+#model-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(4, 12, 20, 0.86);
+  color: var(--text-3);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+#model-loading.is-hidden { display: none; }
+.ml-ring {
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid rgba(94, 231, 242, 0.25);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: ml-spin 0.9s linear infinite;
+}
+@keyframes ml-spin { to { transform: rotate(360deg); } }
+
+#boot-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  max-width: 520px;
+  padding: 18px 22px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 120, 120, 0.28);
+  border-radius: var(--radius-lg);
+  background: rgba(20, 8, 10, 0.9);
+  color: #ffc6c6;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+#node-card {
+  position: absolute;
+  right: 22px;
+  bottom: 88px;
+  z-index: 4;
+  width: 330px;
+  padding: 15px 16px 14px;
+  border: 1px solid rgba(94, 231, 242, 0.22);
+  border-radius: var(--radius-lg);
+  background: rgba(5, 17, 27, 0.92);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(14px);
+  animation: card-in 0.18s var(--ease);
+}
+@keyframes card-in { from { opacity: 0; transform: translateY(6px); } }
+#node-card .nc-kind {
+  color: var(--cyan);
+  font-size: 10px;
+  letter-spacing: 1.6px;
+}
+#node-card .nc-title {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+}
+#node-card .nc-meta {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-3);
+  font-size: 11px;
+}
+#node-card .nc-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1;
+}
+#node-card .nc-close:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+
+/* 通用无样式列表 */
+ol, ul { margin: 0; padding: 0; list-style: none; }
+p, h1, h2, h3 { margin: 0; }
+
+/* 数字统一表格数字，避免跳动 */
+.num,
+.stat-value,
+.big-num,
+.runtime-row-value,
+.entry-value { font-variant-numeric: tabular-nums; }
+
+/* 通用分隔线 */
+.hr {
+  height: 1px;
+  background: var(--line-soft);
+}
+
+/* 小屏：先缩短侧栏，再收起右栏（DSH 面板常见宽度 1100–1600） */
+@media (max-width: 1500px) {
+  :root { --left-w: 250px; --right-w: 316px; }
+}
+@media (max-width: 1180px) {
+  :root { --left-w: 236px; --right-w: 296px; }
+  .stage-caption { font-size: 10.5px; letter-spacing: 1.2px; }
+}
+@media (max-width: 940px) {
+  :root { --left-w: 228px; --right-w: 280px; }
+  #panel-right { display: none; }
+  #app {
+    grid-template-columns: var(--left-w) minmax(0, 1fr);
+    grid-template-areas:
+      "top top"
+      "left stage"
+      "bottom bottom";
+  }
+}
+@media (max-width: 720px) {
+  :root { --left-w: 0px; --topbar-h: 58px; }
+  #panel-left { display: none; }
+  #app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "top"
+      "stage"
+      "bottom";
+  }
+  .stage-eyebrow i { width: 34px; }
+}
+@media (max-height: 700px) {
+  .stage-caption { bottom: 34px; }
+  .stage-eyebrow { top: 12px; }
+}

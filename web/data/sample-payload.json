@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "source": "sample",
+  "version": "1.0.0+sample",
+  "status": { "connected": true, "readonly": true, "syncLabel": "示例数据" },
+  "overview": {
+    "conversationOriginals": 3,
+    "derivedFacts": 3,
+    "vectorIndex": 0,
+    "loaded": 3,
+    "total": 3,
+    "timeRange": "最近30天",
+    "memoryType": "全部类型",
+    "updatedAt": "2026/01/01 00:00:00",
+    "categories": { "fact": 2, "reasoning": 1, "followup": 0 }
+  },
+  "functionEntries": [],
+  "runtime": {},
+  "footer": {},
+  "memories": [
+    { "id": 9001, "text": "示例：项目要求在每周五前完成巡检。", "kind": "fact", "tone": "fact", "importance": 0.8, "created_at": 1767225600, "date": "2026/01/01 08:00:00" },
+    { "id": 9002, "text": "示例：用户偏好先给结论，再给依据。", "kind": "followup", "tone": "followup", "importance": 0.6, "created_at": 1767225600, "date": "2026/01/01 08:01:00" },
+    { "id": 9003, "text": "示例：巡检前先读取历史记录。", "kind": "reasoning", "tone": "reasoning", "importance": 0.7, "created_at": 1767225600, "date": "2026/01/01 08:02:00" }
+  ],
+  "graph": {
+    "nodes": [
+      { "id": 1, "name": "示例项目", "type": "project", "degree": 2, "iso": false },
+      { "id": 2, "name": "巡检任务", "type": "task", "degree": 2, "iso": false },
+      { "id": 3, "name": "示例设备", "type": "device", "degree": 1, "iso": false }
+    ],
+    "edges": [
+      { "src": 1, "dst": 2, "kind": "contains", "label": "包含", "weight": 1 },
+      { "src": 2, "dst": 3, "kind": "checks", "label": "检查", "weight": 1 }
+    ],
+    "memories": [
+      { "id": 9001, "text": "示例：项目要求在每周五前完成巡检。", "kind": "fact", "importance": 0.8, "created_at": 1767225600, "entities": [1, 2] },
+      { "id": 9003, "text": "示例：巡检前先读取历史记录。", "kind": "reasoning", "importance": 0.7, "created_at": 1767225600, "entities": [2, 3] }
+    ]
+  }
+}
