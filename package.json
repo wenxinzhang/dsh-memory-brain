@@ -37,7 +37,8 @@
     "web/data/sample-payload.json",
     "web/data/README.md",
     "docs/software-description.md",
-    "DATA-POLICY.md"
+    "DATA-POLICY.md",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "scripts": {
     "check": "node --check lib/index.js && node --check lib/client.js",

@@ -172,5 +172,5 @@ node tools/loop-e2e-manage.mjs http://127.0.0.1:18912/ /tmp/loop-manage
 
 ## 许可证
 
-代码 MIT。第三方前端资源遵循各自许可证（见 `web/assets/*LICENSE*`）。
+代码 MIT。第三方前端资源遵循各自许可证（见 `web/assets/*LICENSE*` 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)）。
 数据不在开源许可范围内，详见 [DATA-POLICY.md](DATA-POLICY.md)。
