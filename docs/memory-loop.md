@@ -1,6 +1,6 @@
-# 记忆闭环（第一阶段 v2）
+# 记忆闭环（SQLite schema v4）
 
-叠加在现有「忆核大脑」页面上的完整闭环，复用 DSH 插件、深色三栏界面、本地模型和 SQLite，不引入图数据库或向量库。
+叠加在现有「脑内星河」页面上的完整闭环，复用 DSH 插件、深色三栏界面、本地模型和 SQLite，不引入图数据库或向量库。
 
 ```
 原始对话（证据）→ 原子记忆 → 动态本体映射 → 规则候选 → 确认/生效
@@ -21,7 +21,7 @@
 ## 存储与迁移
 
 - 默认数据库：`web/data/loop.db`（SQLite，WAL），可用 `loopDb` 覆盖。
-- 迁移表：`loop_schema_migrations`，当前版本 **2**；启动自动执行，已有 v1 库原地升级（`ALTER TABLE ... ADD COLUMN`），不删旧数据。
+- 迁移表：`loop_schema_migrations`，当前版本 **4**；启动按顺序升级，不删旧数据。模型调用账本另用 `loop_execution_migrations`（v1）。升级前应使用 SQLite 一致性备份，不能只复制运行中的主 DB 文件。
 - v1 → v2 新增：来源附件/角色修正/归档时间，记忆 `protected`/`extraction_run_id`/`parent_memory_id`，规则结构错误/反馈关联，批次详情/来源哈希/代次，记忆版本、本体属性历史、抽取分块运行、Skill 候选表。
 - 不修改 `xiaojiu_brain` 服务数据库。
 
@@ -61,7 +61,7 @@
 - 无法结构化的规则保存为 `needs_structure`/`unstructured`，不能自动执行。
 - 权威性顺序：当前明确指令 > 当前任务/产物 > 项目 > 领域 > 个人长期偏好 > 模型推断。来源身份由应用元数据决定，导入文本不能自称高优先级。
 - 冲突检测：同范围、共享条件对象、相反强度或冲突动作 → 保留双方并给出裁决/未裁决说明，不静默删除。
-- 版本：人工编辑写 `loop_rule_versions`；替代生成新规则并令旧规则 `superseded`；过期规则不参与当前上下文。
+- 版本：人工编辑写 `loop_rule_versions`；替代先生成候选，审核生效后事务切换旧规则；过期规则不参与当前上下文。冲突裁决绑定双方版本，修改规则后需重新裁决；旧裁决保留历史。
 - 模拟评估返回 `applicable / not_applicable / unknown` 与逐条件原因，只读。
 
 ## 上下文与反馈
@@ -99,7 +99,7 @@
 ## 测试与验收
 
 ```bash
-node --test tests/loop.test.mjs                         # 37 条确定性/集成行为测试（含 mock 模型）
+npm test                                              # 当前自动化测试（含合成模型）
 node tools/loop-dev-server.mjs --port 18912             # 独立 host，不动正在运行的 DSH
 node tools/loop-e2e.mjs http://127.0.0.1:18912/ /tmp/loop-shots   # 53 项浏览器 E2E
 node tools/loop-e2e-manage.mjs http://127.0.0.1:18912/ /tmp/loop-manage  # 39 项管理动作
@@ -145,13 +145,13 @@ node tools/loop-dev-server.mjs --port 18912 --db web/data/loop-verify.db
 ## 动作权限边界
 
 - 本机没有外部执行器：动作校验即使 `authorized_not_executed` 也不会调用任何工具或业务系统。
-- 动作授权必须每次显式 `authorized:true`，并命中适用的 permission 规则；规则生效、业务记忆、导入文本都不能替代授权。
+- 动作必须命中适用 permission 规则，并由 DSH 本次工具审批落实授权。HTTP 请求中的 `authorized:true` 不受信任；policy allow 也不等于用户批准。独立动作检查接口不执行外部动作。
 - 禁止动作（must_not / block / deny / forbid）不能被授权绕过。
 
 ## 当前边界（明确未做）
 
-- 导入是同步处理（浏览器侧并行轮询进度）；没有跨进程持久队列/断点恢复。
-- 向量/语义检索仍在 `xiaojiu_brain` 服务，本闭环用确定性过滤 + 关键词。
+- 导入/抽取/向量化通过 SQLite 持久队列处理；租约心跳与提交时所有权检查阻止迟到 worker 发布。取消不能撤回已发送给模型的请求。
+- 向量召回需要显式配置端点；未配置或失败时显式降级词法。
 - 附件只存元数据，不解析内容。
 - 结构候选发布只支持 type/property/relation；复杂迁移需人工。
 - 反馈不会自动训练或自动发布模型；不会把沉默当认可。

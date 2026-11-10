@@ -1,6 +1,6 @@
 # 脑内星河（Mind Galaxy）— out-of-tree DSH bundle。
 # 一行 insert：host 侧在 webServer 上注册 /memory-brain 前缀路由（打包的 web/ 静态页 +
-# 只读 /memory-brain/api/* 数据接口），client 侧在会话视图里加一个「脑内星河」tab。
+# 数据查询与记忆闭环 API），client 侧在会话视图里加一个「脑内星河」tab。
 # 默认值即可运行；需要改数据源时在 profile 的 cordis.patch.yml 里覆盖 config：
 #   - id: memory-brain
 #     config:

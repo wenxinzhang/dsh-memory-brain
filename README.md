@@ -1,4 +1,4 @@
-# 忆核大脑（Memory Brain）
+# 脑内星河（Mind Galaxy）
 
 > DeepSeek Harness 里的本地优先记忆闭环插件：把历史对话变成可追溯的原子记忆、
 > 动态本体、可执行规则和可解释上下文，并用版本与反馈形成闭环。
@@ -9,7 +9,7 @@
 
 ## 它解决什么问题
 
-聊天记录能翻找，但不能可靠复用。忆核大脑把对话当**证据**，从里面拆出事实、偏好、约束、
+聊天记录能翻找，但不能可靠复用。脑内星河把对话当**证据**，从里面拆出事实、偏好、约束、
 决策、事件、待办和方法；再映射到动态本体与业务规则；需要时按用户/项目/任务/业务对象/
 当前状态组装上下文，并把执行结果、用户纠正回写成新版本。
 
@@ -20,6 +20,7 @@
 
 ## 功能
 
+- **聊天后自动整理**：正常完成的新轮次自动保存可见对话并入持久队列，复用该轮模型提取记忆；助手推断保留候选，原文可追溯。失败保留原文并可手动重试，不回扫历史聊天。
 - **对话导入**：JSON / Markdown / TXT / 粘贴；角色修正、归属、附件元数据、重复导入去重、增量追加。
 - **持久后台队列**：导入/拆解/向量化任务写入 SQLite；重启/关页面不丢；支持取消与重试。
 - **原子记忆**：模型建议默认候选；用户确认/纠正生成受保护版本；冲突保留；证据可回到原文。
@@ -38,7 +39,7 @@
 ```bash
 git clone https://github.com/wenxinzhang/dsh-memory-brain.git ~/dsh-workspace/memory-brain
 cd ~/dsh-workspace/memory-brain
-node tools/seed-sample.mjs --force     # 完全合成的开放样例，可跳过
+node tools/seed-sample.mjs             # 可选；数据库已存在时拒绝覆盖
 ```
 
 在 DSH 中用 Plugin Manager 安装本地目录：
@@ -47,14 +48,14 @@ node tools/seed-sample.mjs --force     # 完全合成的开放样例，可跳过
 plugin_manager install_bundle target: ~/dsh-workspace/memory-brain
 ```
 
-安装成功后打开 Web GUI → 任意会话 →「忆核大脑」→ 顶栏「闭环」。
+安装成功后打开 Web GUI → 任意会话 →「脑内星河」→ 顶栏「闭环」。
 
 ### 独立开发 / 验收（不启动 DSH）
 
 ```bash
 cd ~/dsh-workspace/memory-brain
-node tools/seed-sample.mjs --force
-node tools/loop-dev-server.mjs --port 18912
+node tools/seed-sample.mjs --db web/data/loop-demo.db
+node tools/loop-dev-server.mjs --port 18912 --db web/data/loop-demo.db
 # 浏览器打开 http://127.0.0.1:18912/ → 顶栏「闭环」
 ```
 
@@ -97,7 +98,7 @@ memory-brain/
 ├─ lib/client.js         conversation.view tab
 ├─ web/                  页面、样式、3D 资源
 ├─ web/data/             运行时数据目录（真实数据不入库；仅 sample-payload）
-├─ tests/loop.test.mjs   37 条行为测试
+├─ tests/                运行时、宿主契约、前端和回归测试
 ├─ tools/                样例数据、独立 dev server、浏览器 E2E
 ├─ docs/                 软件说明、契约、验收记录
 ├─ cordis.patch.yml      DSH bundle patch
@@ -131,7 +132,10 @@ memory-brain/
 | `rulesApiKeyEnv` | 空 | 模型 Key 环境变量名 |
 | `loopEmbedEndpoint` / `loopEmbedModel` / `loopEmbedApiKeyEnv` | 本机 bge-m3 | 可选向量召回 |
 | `loopWorkerIntervalMs` | 1200 | 后台任务轮询 |
+| `loopAutoExtract` | true | 正常聊天结束后自动提取；会额外调用该轮模型处理本轮可见文字。会话高级设置可单独关闭 |
 | `loopContextChars` | 20000 | 上下文硬约束预算 |
+| `contextWindow` | 0（不声明） | 宿主没有模型窗口元数据时的回退 token 窗口；0 = 窗口未知时跳过请求预算拦截，交给宿主压缩 |
+| `reservedOutput` | 2048 | 模型未给出 `maxTokens` 时的回答预留（token） |
 
 ## API 摘要
 
@@ -146,7 +150,20 @@ memory-brain/
 
 完整契约见 [docs/loop-api-v2.md](docs/loop-api-v2.md)（接口 v3 / schema v4）。
 
+## 模型调用接入（本次开发）
+
+新增服务端 DSH 调用接缝、独立上下文编译器和 SQLite 调用账本，不依赖打开大脑面板。真实事件契约、迁移及验证边界见 [模型接入说明](docs/model-integration.md)。
+
+发流前的请求预算使用宿主同款密度启发式（中文按 1 token/字 修正，`ctx.tokenMeter` 可用时取较大值）；模型窗口取当前路由的 `requestContext()` 或已声明配置，窗口未知时不拦截，避免大历史被字节估算误杀整轮对话。
+
+该能力仍需要在当前 DSH 进程装载插件后进行真实集成验收；合成模型测试不等于真实 GUI 已验收。原有手动 `/context`、规则管理和持久队列接口继续保留。
+
 ## 测试
+
+```bash
+npm run check
+npm test
+```
 
 ```bash
 node --test tests/loop.test.mjs
@@ -159,8 +176,7 @@ node tools/loop-e2e.mjs http://127.0.0.1:18912/ /tmp/loop-shots
 node tools/loop-e2e-manage.mjs http://127.0.0.1:18912/ /tmp/loop-manage
 ```
 
-当前基线：37 个行为测试；53 + 39 项浏览器 E2E。详见
-[verification-v3.md](docs/verification-v3.md)。
+当前自动化验证为 143 项测试通过，覆盖导入、范围隔离、规则权限、调用预算、自动聊天抽取、归档撤回和前端交互。宿主接入与真实环境验证边界见 [模型接入说明](docs/model-integration.md)。历史浏览器验收记录见 [verification-v3.md](docs/verification-v3.md)，属于其记录版本。
 
 ## 文档
 

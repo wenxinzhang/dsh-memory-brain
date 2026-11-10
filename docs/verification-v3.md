@@ -93,7 +93,7 @@ node tools/seed-v4-fixtures.mjs web/data/loop-verify.db
 node tools/loop-dev-server.mjs --port 18912 --db web/data/loop-verify.db
 # 打开 http://127.0.0.1:18912/ → 顶栏「闭环」
 
-# 线上：DSH → 忆核大脑 → 闭环（当前已加载 v4）
+# 线上：DSH → 脑内星河 → 闭环（当前已加载 v4）
 ```
 
 在线体验顺序：导入（自动入队）→ 任务队列看进度 → 记忆/本体/规则 → 规则模拟与冲突裁决 →

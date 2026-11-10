@@ -1,4 +1,4 @@
-# Memory Brain v0.0.1
+# Mind Galaxy v0.0.1
 
 首个开源版本（从 v0.0.1 开始）：DeepSeek Harness 内的本地优先「记忆闭环」插件。
 
