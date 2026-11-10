@@ -14,7 +14,7 @@ test('a completed host turn queues only that turn visible messages with the capt
  const captured=[];let scope={project_id:'p1',task_id:'task1'}
  const runtime={captureChatTurn:input=>{captured.push(input);return {status:'queued',job_id:'job1',source_id:'source1'}}}
  const api=createDshIntegration({runtime,executionStore:{scope:(_,patch)=>{if(patch)scope={...scope,...patch};return scope}}})
- const events=[{seq:0,type:'user/message',data:{id:'old',role:'user',content:'previous turn'}},{seq:1,type:'turn/start',data:{turn:1}},{seq:2,type:'user/message',data:{id:'memory',role:'user',source:{kind:'plugin:@dafeiyu/dsh-memory-brain'},content:'injected context'}},{seq:3,type:'user/message',data:{id:'u',role:'user',source:{kind:'user'},content:[{type:'text',text:'以后先给结论'}]}},{seq:4,type:'assistant/message',data:{turn:1,message:{id:'a',role:'assistant',content:[{type:'reasoning',text:'private reasoning'},{type:'text',text:'明白'}]}}},{seq:5,type:'tool/result',data:{text:'tool output'}},{seq:6,type:'turn/end',data:{turn:1,reason:{kind:'completed'}}}]
+ const events=[{seq:0,type:'user/message',data:{id:'old',role:'user',content:'previous turn'}},{seq:1,type:'turn/start',data:{turn:1}},{seq:2,type:'user/message',data:{id:'memory',role:'user',source:{kind:'plugin:@fuxing/dsh-brain'},content:'injected context'}},{seq:3,type:'user/message',data:{id:'u',role:'user',source:{kind:'user'},content:[{type:'text',text:'以后先给结论'}]}},{seq:4,type:'assistant/message',data:{turn:1,message:{id:'a',role:'assistant',content:[{type:'reasoning',text:'private reasoning'},{type:'text',text:'明白'}]}}},{seq:5,type:'tool/result',data:{text:'tool output'}},{seq:6,type:'turn/end',data:{turn:1,reason:{kind:'completed'}}}]
  const session={id:'s',header:{cwd:'E:/p1'},eventAt:seq=>events[seq]}
  await api.onSessionEvent(session,events[1])
  await api.onPreStep({agent:{session},turn:1,step:1,modelSelection:{provider:'p',model:'m'},messages:[events[3].data]},()=>({kind:'enter',messages:[]}))
@@ -161,7 +161,7 @@ test('pre-step messages satisfy the installed dsh source contract', async()=>{
  // The installed agent-loop reads source.kind before persisting any message.
  assert.doesNotThrow(()=>result.messages.forEach(message=>message.source.kind))
  const injected=result.messages.at(-1)
- assert.equal(injected.source.kind,'plugin:@dafeiyu/dsh-memory-brain')
+ assert.equal(injected.source.kind,'plugin:@fuxing/dsh-brain')
  assert.equal(typeof injected.id,'string')
  assert.ok(injected.id.length>0)
  assert.equal(result.kind,'enter')

@@ -12,7 +12,7 @@ export function mount(el, data, handlers = {}) {
     <div class="brand">
       <div class="brand-mark">${icons.brain}</div>
       <div class="brand-text">
-        <div class="brand-title">脑内星河</div>
+        <div class="brand-title">星河大脑</div>
         <div class="brand-sub">MIND GALAXY</div>
       </div>
     </div>

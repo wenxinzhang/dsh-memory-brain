@@ -1,11 +1,11 @@
-# 脑内星河 · 记忆闭环（Mind Galaxy）软件说明
+# 星河大脑 · 记忆闭环（Galaxy Brain）软件说明
 
 > 一个运行在 DeepSeek Harness 内的本地优先记忆系统：把历史对话变成可追溯的原子记忆、
 > 动态本体、可执行规则和可解释上下文，并用版本与反馈形成闭环。
 
 ## 1. 软件定位
 
-普通聊天记录只能“翻找”，不能可靠复用。脑内星河把对话当作证据，把其中事实、偏好、
+普通聊天记录只能“翻找”，不能可靠复用。星河大脑把对话当作证据，把其中事实、偏好、
 约束、决策、事件、待办和方法拆成原子记忆，再映射到动态本体和业务规则；在需要时按
 用户/项目/任务/业务对象/当前状态组装上下文，并把执行结果和用户纠正回写成新版本。
 
@@ -74,10 +74,10 @@ plugin_manager install_bundle target: ~/dsh-workspace/memory-brain
 或用 npm 包安装（发布后）：
 
 ```bash
-plugin_manager install_bundle target: @dafeiyu/dsh-memory-brain@0.0.1
+plugin_manager install_bundle target: @fuxing/dsh-brain@0.0.1
 ```
 
-安装后在 DSH 任意会话打开「脑内星河」tab → 顶栏「闭环」。host 代码变更后需重启
+安装后在 DSH 任意会话打开「星河大脑」tab → 顶栏「闭环」。host 代码变更后需重启
 DSH 或重载插件；纯静态页面刷新即可。
 
 ### 独立开发/验收

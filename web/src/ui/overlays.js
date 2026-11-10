@@ -221,7 +221,7 @@ export function openLock(onUnlock) {
   wrap.innerHTML = `
     <div class="lock-card">
       <div class="lock-icon">${icons.lock}</div>
-      <h2>脑内星河已锁定</h2>
+      <h2>星河大脑已锁定</h2>
       <p>记忆仍在本地运行，解锁后继续查看。</p>
       <button type="button" data-unlock>解锁并继续</button>
     </div>`

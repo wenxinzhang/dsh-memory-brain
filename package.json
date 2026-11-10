@@ -1,9 +1,9 @@
 {
-  "name": "@dafeiyu/dsh-memory-brain",
+  "name": "@fuxing/dsh-brain",
   "version": "0.0.1",
   "private": false,
   "type": "module",
-  "description": "脑内星河（Mind Galaxy）：DeepSeek Harness 内的本地优先记忆闭环插件（对话→记忆→本体→规则→上下文→反馈）。",
+  "description": "星河大脑（Galaxy Brain）：DeepSeek Harness 内的本地优先记忆闭环插件（对话→记忆→本体→规则→上下文→反馈）。",
   "license": "MIT",
   "author": "dafeiyu",
   "main": "lib/index.js",

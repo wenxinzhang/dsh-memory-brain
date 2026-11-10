@@ -25,7 +25,7 @@ test('completed chat capture persists original roles and queues one durable extr
   {id:'u1',role:'user',content:'以后检查代码先给结论'},
   {id:'a1',role:'assistant',content:[{type:'reasoning',text:'private reasoning'},{type:'text',text:'好的，我会先给结论'}]},
   {role:'tool',content:'tool secret'},
-  {role:'user',source:{kind:'plugin:@dafeiyu/dsh-memory-brain'},content:'injected memory'},
+  {role:'user',source:{kind:'plugin:@fuxing/dsh-brain'},content:'injected memory'},
  ]}
  const first=f.runtime.captureChatTurn(input)
  const again=f.runtime.captureChatTurn(input)

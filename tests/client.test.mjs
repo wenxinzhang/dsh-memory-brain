@@ -16,7 +16,7 @@ async function probe(options = {}) {
   }
   const window = { location: { protocol: 'http:', origin: 'http://localhost', search: '', ...options.location }, addEventListener() {}, removeEventListener() {}, fetch: options.fetch || (() => {}) }
   let plugin; const views = new Map();const listeners=new Map();const disposers=[]
-  let rows=options.hostRows || [{moduleName:'@dafeiyu/dsh-memory-brain',enabled:true,fiberPhase:'active'}]
+  let rows=options.hostRows || [{moduleName:'@fuxing/dsh-brain',enabled:true,fiberPhase:'active'}]
   const install=effect=>{
     if(typeof effect==='function')return effect
     if(effect && typeof effect[Symbol.iterator]==='function'){const undo=[...effect].filter(value=>typeof value==='function');return ()=>undo.reverse().forEach(fn=>fn())}
@@ -40,9 +40,9 @@ async function probe(options = {}) {
 test('disabling the host plugin removes both tabs and enabling it restores a single pair',async()=>{
  const api=await probe()
  assert.equal(api.views.size,2)
- await api.hostRows([{moduleName:'@dafeiyu/dsh-memory-brain',enabled:false,fiberPhase:null}])
+ await api.hostRows([{moduleName:'@fuxing/dsh-brain',enabled:false,fiberPhase:null}])
  assert.equal(api.views.size,0)
- await api.hostRows([{moduleName:'@dafeiyu/dsh-memory-brain',enabled:true,fiberPhase:'active'}])
+ await api.hostRows([{moduleName:'@fuxing/dsh-brain',enabled:true,fiberPhase:'active'}])
  assert.equal(api.views.size,2)
  api.dispose();assert.equal(api.views.size,0)
  assert.equal(api.listeners.get('plugin-manager/changed')?.size || 0,0)
@@ -59,7 +59,7 @@ test('a late configuration response cannot restore tabs after the host was disab
  const api=await probe({hostRows:[]})
  let release
  api.window.fetch=()=>new Promise(resolve=>{release=resolve})
- const enabling=api.hostRows([{moduleName:'@dafeiyu/dsh-memory-brain',enabled:true,fiberPhase:'active'}])
+ const enabling=api.hostRows([{moduleName:'@fuxing/dsh-brain',enabled:true,fiberPhase:'active'}])
  await new Promise(resolve=>setTimeout(resolve,5))
  assert.equal(typeof release,'function')
  await api.hostRows([])
