@@ -195,7 +195,7 @@ export function mount(el, data, handlers = {}) {
       if (next.updatedAt) q('[data-updated]').textContent = next.updatedAt
       if (next.total != null) totalEl.textContent = fmt(next.total)
     },
-    setLoaded(n) { loadedEl.textContent = fmt(n) },
+    setLoaded(n, total) { loadedEl.textContent = fmt(n); if(total != null) totalEl.textContent=fmt(total); moreBtn.disabled=total != null && n>=total;moreBtn.textContent=moreBtn.disabled?'已全部加载':'加载更多' },
     setUpdated(str) { if (str) q('[data-updated]').textContent = str },
     setSearching(on) { searchForm.classList.toggle('is-searching', !!on) },
     setSearchResults(res, qstr) {

@@ -282,16 +282,20 @@ function errorHtml(e, extra = '') {
 
 /* ------------------------------------------------------------------ 抽屉 */
 
-export function openLoop() {
+export function openLoop(options = {}) {
   const root = document.getElementById('overlay-root')
   if (!root) return
+  root.__memoryBrainClose?.()
+  let closed = false
+  const listeners = []
+  const listen = (name, fn) => { root.addEventListener(name, fn); listeners.push(() => root.removeEventListener(name, fn)) }
   root.innerHTML = ''
   document.body.classList.add('overlay-open')
 
   const savedForms = storeGet('session', STORE_KEY.forms, {}) || {}
   const savedFilters = storeGet('session', STORE_KEY.filters, {}) || {}
   const savedView = storeGet('session', STORE_KEY.view, 'import')
-  const initialView = TABS.some(([k]) => k === savedView) ? savedView : 'import'
+  const initialView = TABS.some(([k]) => k === options.view) ? options.view : TABS.some(([k]) => k === savedView) ? savedView : 'import'
   const draft = readDraft()
 
   const state = {
@@ -455,6 +459,10 @@ export function openLoop() {
   }
 
   function close() {
+    if (closed) return
+    closed = true
+    listeners.splice(0).forEach(dispose => dispose())
+    root.__memoryBrainClose = null
     persistForms()
     persistFilters()
     saveDraftNow(state.forms.import.text)
@@ -469,6 +477,7 @@ export function openLoop() {
   }
   const onKey = (e) => { if (e.key === 'Escape') close() }
   document.addEventListener('keydown', onKey)
+  root.__memoryBrainClose = close
 
   /* ---------------------------------------------------------------- 通用渲染 */
 
@@ -598,6 +607,7 @@ export function openLoop() {
     } catch (e) {
       state.viewError[v] = e
     }
+    if (closed) return
     state.loading[v] = false
     await refreshOverview()
     render()
@@ -1737,7 +1747,7 @@ export function openLoop() {
         <label>动作类型<select data-f="action.type">${opt('execute', '执行 execute', f.type)}${opt('start', '启动 start', f.type)}${opt('run', '运行 run', f.type)}${opt('other', '其他', f.type)}</select></label>
         <label>动作目标 target<input data-f="action.target" value="${esc(f.target || '')}" placeholder="如 parameter_optimization"></label>
         <label>授权备注<input data-f="action.note" value="${esc(f.note || '')}" placeholder="可选：授权依据"></label>
-        <label class="loop-check"><input type="checkbox" data-f="action.authorized"${f.authorized ? ' checked' : ''}> 本人明确授权本次动作</label>
+        <div class="loop-hint">本页只做动作模拟；实际执行授权由 DSH 工具审批完成。</div>
       </div>
       <div class="loop-actions">
         <button class="loop-btn loop-btn-primary" type="button" data-loop-action="action-check">校验动作权限</button>
@@ -2010,6 +2020,7 @@ export function openLoop() {
   }
 
   function render() {
+    if (closed) return
     const fn = VIEWS[view] || importView
     const err = state.viewError[view]
     const loading = !!state.loading[view]
@@ -2924,7 +2935,7 @@ export function openLoop() {
       if (typeof window.__MB_SET_GRAPH__ !== 'function') return toast('当前页面未提供投射接口')
       const target = state.graphProjection === 'loop' ? 'base' : 'loop'
       try {
-        await window.__MB_SET_GRAPH__(target)
+        await window.__MB_SET_GRAPH__(target, {owner:state.filters.graph.owner,project:state.filters.graph.project,limit:150})
         state.graphProjection = target
         toast(target === 'loop' ? '已投射闭环图谱到中央大脑' : '已恢复原始大脑图谱')
         render()
@@ -2946,7 +2957,7 @@ export function openLoop() {
 
   /* ---------------------------------------------------------------- 事件 */
 
-  root.addEventListener('click', async (e) => {
+  listen('click', async (e) => {
     const tab = e.target.closest('[data-view]')
     if (tab) {
       const next = tab.dataset.view
@@ -2984,7 +2995,7 @@ export function openLoop() {
     }
   })
 
-  root.addEventListener('change', (e) => {
+  listen('change', (e) => {
     const t = e.target
     if (t.matches('#loop-file')) {
       const f = t.files && t.files[0]
@@ -3038,7 +3049,7 @@ export function openLoop() {
     }
   })
 
-  root.addEventListener('input', (e) => {
+  listen('input', (e) => {
     const t = e.target
     const fieldEl = t.closest('[data-f]')
     if (fieldEl && fieldEl.type !== 'checkbox') {
@@ -3063,17 +3074,17 @@ export function openLoop() {
   })
 
   // 拖放：只接受抽屉内的 drop 区
-  root.addEventListener('dragover', (e) => {
+  listen('dragover', (e) => {
     const zone = e.target.closest('#loop-drop')
     if (!zone) return
     e.preventDefault()
     zone.classList.add('is-over')
   })
-  root.addEventListener('dragleave', (e) => {
+  listen('dragleave', (e) => {
     const zone = e.target.closest('#loop-drop')
     if (zone) zone.classList.remove('is-over')
   })
-  root.addEventListener('drop', (e) => {
+  listen('drop', (e) => {
     const zone = e.target.closest('#loop-drop')
     if (!zone) return
     e.preventDefault()

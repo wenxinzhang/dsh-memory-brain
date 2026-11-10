@@ -1,5 +1,6 @@
 /* 记忆闭环抽屉 */
 .loop-drawer {
+  pointer-events: auto;
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 70;
   width: min(780px, calc(100vw - 24px)); display: flex; flex-direction: column;
   background: linear-gradient(180deg, rgba(7, 18, 27, .985), rgba(4, 13, 20, .995));

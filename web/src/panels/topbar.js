@@ -12,15 +12,15 @@ export function mount(el, data, handlers = {}) {
     <div class="brand">
       <div class="brand-mark">${icons.brain}</div>
       <div class="brand-text">
-        <div class="brand-title">忆核大脑</div>
-        <div class="brand-sub">MEMORY BRAIN</div>
+        <div class="brand-title">脑内星河</div>
+        <div class="brand-sub">MIND GALAXY</div>
       </div>
     </div>
     <div class="top-actions">
       <div class="conn" id="conn">
         <span class="conn-dot${connected ? '' : ' is-off'}"></span>
         <div>
-          <div class="conn-title">${connected ? '本机大脑已连接' : '本机大脑未连接'}</div>
+          <div class="conn-title">${status.degraded ? '服务不可用 · 静态回退' : data.source==='sample' ? '合成样例 · 非个人记忆' : connected ? '本机大脑已连接' : '本机大脑未连接'}</div>
           <div class="conn-sub">${readonly ? 'READ ONLY' : 'READ WRITE'} · ${esc(version)}</div>
         </div>
       </div>
@@ -51,7 +51,7 @@ export function mount(el, data, handlers = {}) {
     setStatus(s) {
       if (!s) return
       if (s.connected != null) el.querySelector('.conn-dot')?.classList.toggle('is-off', !s.connected)
-      if (s.connected != null) el.querySelector('.conn-title').textContent = s.connected ? '本机大脑已连接' : '本机大脑未连接'
+      if (s.connected != null) el.querySelector('.conn-title').textContent = s.degraded ? '服务不可用 · 静态回退' : s.connected ? '本机大脑已连接' : '本机大脑未连接'
       if (s.version) el.querySelector('.conn-sub').textContent = `${s.readonly === false ? 'READ WRITE' : 'READ ONLY'} · ${s.version}`
     },
   }

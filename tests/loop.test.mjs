@@ -45,7 +45,7 @@ function insertMemory(rt, over = {}) {
   const m = {
     id: `mem_test_${Math.random().toString(36).slice(2)}`, type: 'fact', text: '测试事实',
     subject: 'WELL_001', predicate: 'status', object_value: 'maintenance', scope_type: 'personal', scope_id: null,
-    owner: 'u1', project: 'p1', source_category: 'user_statement', confirmation: 'stated', certainty: 0.9,
+    owner: 'u1', project: null, source_category: 'user_statement', confirmation: 'stated', certainty: 0.9,
     status: 'confirmed', recorded_at: new Date().toISOString(), confidence: 0.9, ...over,
   }
   rt.db.prepare(`INSERT INTO loop_memories(id,source_id,type,text,subject,predicate,object_value,normalized_key,scope_type,scope_id,owner,project,task,source_category,confirmation,certainty,status,event_time,valid_from,valid_to,recorded_at,version,supersedes_id,conflict_group,ontology_instance_id,confidence,sensitive,metadata_json,created_at,updated_at)
@@ -58,7 +58,7 @@ function insertMemory(rt, over = {}) {
 function insertRule(rt, over = {}) {
   const r = {
     id: `rule_test_${Math.random().toString(36).slice(2)}`, name: '检修禁优化', category: 'business_constraint',
-    scope_type: 'artifact', scope_id: 'WELL_001', owner: 'u1', project: 'p1', strength: 'must_not',
+    scope_type: 'artifact', scope_id: 'WELL_001', owner: 'u1', project: null, strength: 'must_not',
     conditions: { op: 'eq', path: 'well.status', value: 'maintenance' }, actions: [{ type: 'block', target: 'optimization' }],
     governance_status: 'active', structure_status: 'structured', confirmation: 'confirmed', ...over,
   }
@@ -551,6 +551,54 @@ test('来源归档：失去唯一证据的派生记忆退出当前调用', async
   } finally { await f.close() }
 })
 
+test('不同项目的同名范围规则不互相形成冲突', async () => {
+  const f = await fixture()
+  try {
+    insertRule(f.rt, { id: 'project-one', scope_type: 'personal', project: 'p1', strength: 'must' })
+    insertRule(f.rt, { id: 'project-two', scope_type: 'personal', project: 'p2', strength: 'must_not' })
+    const ctx = await f.post('/context', { owner: 'u1', project: 'p1', well: { status: 'maintenance' } })
+    assert.equal(ctx.body.sections.conflicts.rules.length, 0)
+  } finally { await f.close() }
+})
+
+test('项目绑定的 personal 记忆和规则不泄漏同名对象到其他项目', async () => {
+  const f = await fixture()
+  try {
+    insertMemory(f.rt, { id: 'project-private', scope_type: 'personal', project: 'p1', text: 'WELL_001 项目一事实' })
+    insertRule(f.rt, { id: 'project-private-rule', scope_type: 'personal', project: 'p1' })
+    const other = await f.post('/context', { owner: 'u1', project: 'p2', object: { name: 'WELL_001' }, well: { status: 'maintenance' } })
+    assert.equal(other.body.sections.facts.length, 0)
+    assert.equal(other.body.sections.rules.length, 0)
+    const same = await f.post('/context', { owner: 'u1', project: 'p1', well: { status: 'maintenance' } })
+    assert.equal(same.body.sections.facts.length, 1)
+    assert.equal(same.body.sections.rules.length, 1)
+  } finally { await f.close() }
+})
+
+test('多个证据来源逐个归档后记忆和规则均退出调用', async () => {
+  const f = await fixture()
+  try {
+    const sources = []
+    for (const n of ['first', 'second']) {
+      const out = await f.post('/import', { owner: 'u1', text: `用户：${n} 的检修证据`, filename: `${n}.txt` })
+      sources.push({ id: out.body.source.id, message: f.rt.db.prepare('SELECT id FROM loop_messages WHERE source_id=?').get(out.body.source.id).id })
+    }
+    insertMemory(f.rt, { id: 'multi-evidence', source_id: sources[0].id })
+    for (const source of sources) f.rt.db.prepare('INSERT INTO loop_memory_evidence(memory_id,message_id,quote) VALUES(?,?,?)').run('multi-evidence', source.message, 'evidence')
+    insertRule(f.rt, { id: 'multi-rule', scope_type: 'personal' })
+    f.rt.db.prepare('UPDATE loop_rules SET evidence_json=? WHERE id=?').run(JSON.stringify(sources.map((s) => ({ message_id: s.message }))), 'multi-rule')
+    const body = { owner: 'u1', project: 'p1', well: { status: 'maintenance' } }
+    await f.post(`/imports/${sources[0].id}/archive?owner=u1`, {})
+    const partial = await f.post('/context', body)
+    assert.ok(partial.body.sections.facts.some((m) => m.id === 'multi-evidence'))
+    assert.ok(partial.body.sections.rules.some((r) => r.id === 'multi-rule'))
+    await f.post(`/imports/${sources[1].id}/archive?owner=u1`, {})
+    const after = await f.post('/context', body)
+    assert.ok(!after.body.sections.facts.some((m) => m.id === 'multi-evidence'))
+    assert.ok(!after.body.sections.rules.some((r) => r.id === 'multi-rule'))
+  } finally { await f.close() }
+})
+
 test('反馈演进：规则内容错误生成候选版本，不自动生效', async () => {
   const f = await fixture()
   try {
@@ -562,7 +610,10 @@ test('反馈演进：规则内容错误生成候选版本，不自动生效', as
     const candidate = f.rt.db.prepare('SELECT * FROM loop_rules WHERE id=?').get(fb.body.applied.id)
     assert.equal(candidate.governance_status, 'candidate')
     const old = f.rt.db.prepare('SELECT governance_status FROM loop_rules WHERE id=?').get('fb-rule')
-    assert.equal(old.governance_status, 'superseded')
+    assert.equal(old.governance_status, 'active')
+    const approved = await f.post(`/rules/${candidate.id}/approve`, { owner: 'u1' })
+    assert.equal(approved.status, 200)
+    assert.equal(f.rt.db.prepare('SELECT governance_status FROM loop_rules WHERE id=?').get('fb-rule').governance_status, 'superseded')
     const fb2 = await f.post('/feedback', { outcome: 'tool_failure', category: 'tool_failure', feedback: '外部系统超时' })
     assert.equal(fb2.body.applied, null)
   } finally { await f.close() }
@@ -636,7 +687,7 @@ test('上下文检索：关键词重排、关联扩展、硬约束不被截断',
     const inst = { id: 'inst-ret', type_id: 'well', name: 'WELL_001', owner: 'u1', project: 'p1' }
     f.rt.db.prepare('INSERT INTO loop_ontology_instances(id,type_id,name,owner,project,status,candidate,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').run(inst.id, inst.type_id, inst.name, inst.owner, inst.project, 'active', 0, new Date().toISOString(), new Date().toISOString())
     insertMemory(f.rt, { id: 'r-mapped', type: 'fact', text: '对象映射事实', ontology_instance_id: 'inst-ret', status: 'confirmed' })
-    const ctx2 = await f.post('/context', { owner: 'u1', object: { name: 'WELL_001' }, query: 'WELL_001' })
+    const ctx2 = await f.post('/context', { owner: 'u1', project: 'p1', object: { name: 'WELL_001' }, query: 'WELL_001' })
     const mapped = (ctx2.body.sections.retrieval.top || []).find((x) => x.memory_id === 'r-mapped')
     assert.ok(mapped && mapped.matched.includes('本体关联'))
   } finally { await f.close() }
@@ -669,18 +720,23 @@ test('动作权限：禁止动作 blocked；未授权 pending；无权限规则 
     assert.ok(pending.body.items.some((x) => x.result === 'pending_authorization'))
     // 明确授权 + 有权限规则：仍然不执行外部动作
     const authorized = await f.post('/actions/check', { ...base, authorized: true, authorization_note: '测试授权', action: { type: 'execute', target: 'tuning' } })
-    assert.equal(authorized.body.result, 'authorized_not_executed')
+    assert.equal(authorized.body.result, 'pending_authorization')
+    assert.equal(authorized.body.authorized, false)
+    const trusted = await f.rt.checkAction({ ...base, action: { type: 'execute', target: 'tuning' } }, { authorized: true })
+    assert.equal(trusted.result, 'authorized_not_executed')
+    assert.equal(trusted.authorized, true)
     assert.equal(authorized.body.executed, false)
-    assert.ok(authorized.body.items.some((x) => x.permission_rule_id === 'act-perm'))
+    assert.ok(trusted.items.some((x) => x.permission_rule_id === 'act-perm'))
     // 禁止动作不能被授权绕过
     const blocked = await f.post('/actions/check', { ...base, authorized: true, action: { type: 'execute', target: 'optimization' } })
     assert.equal(blocked.body.result, 'blocked')
+    assert.equal(blocked.body.authorized, false)
     assert.ok(blocked.body.items.some((x) => x.result === 'blocked' && x.rule_id === 'act-block'))
     // 无权限规则：明确授权也 denied
     f.rt.db.prepare("UPDATE loop_rules SET governance_status='paused' WHERE id='act-perm'").run()
-    const denied = await f.post('/actions/check', { ...base, authorized: true, action: { type: 'execute', target: 'tuning' } })
-    assert.equal(denied.body.result, 'denied')
-    assert.ok(denied.body.items.some((x) => x.result === 'denied' && x.authorization === 'no_permission_rule'))
+    const denied = await f.rt.checkAction({ ...base, action: { type: 'execute', target: 'tuning' } }, { authorized: true })
+    assert.equal(denied.result, 'denied')
+    assert.ok(denied.items.some((x) => x.result === 'denied' && x.authorization === 'no_permission_rule'))
     // 记录可查
     const list = await f.api('/actions?owner=u1')
     assert.ok(list.body.items.length >= 4)
@@ -874,4 +930,133 @@ test('向量召回：未配置显式降级；配置后只参与排序，硬约�
     const re = await f2.post('/embeddings/reindex', { owner: 'u1' })
     assert.equal(re.status, 409)
   } finally { await f2.close(); }
+})
+
+test('有效 permission deny 优先于 allow', async () => {
+  const f = await fixture()
+  try {
+    const common = { scope_type: 'personal', scope_id: null, conditions: { op: 'eq', path: 'well.status', value: 'maintenance' } }
+    insertRule(f.rt, { ...common, category: 'workflow', strength: 'must', actions: [{ type: 'execute', target: 'tuning' }] })
+    insertRule(f.rt, { ...common, category: 'permission', strength: 'must', actions: [{ type: 'allow', target: 'tuning' }] })
+    insertRule(f.rt, { ...common, category: 'permission', strength: 'must_not', actions: [{ type: 'deny', target: 'tuning' }] })
+    const out = await f.rt.checkAction({ owner: 'u1', well: { status: 'maintenance' }, action: { type: 'execute', target: 'tuning' } }, { authorized: true })
+    assert.equal(out.result, 'blocked')
+    assert.equal(out.authorized, false)
+  } finally { await f.close() }
+})
+
+test('权限校验不得重查并绕过人工排除的 permission 规则', async () => {
+  const f = await fixture()
+  try {
+    const common = { scope_type: 'personal', scope_id: null, conditions: { op: 'eq', path: 'well.status', value: 'maintenance' } }
+    insertRule(f.rt, { ...common, id: 'execute-rule', category: 'workflow', strength: 'must', actions: [{ type: 'execute', target: 'tuning' }] })
+    insertRule(f.rt, { ...common, id: 'permission-allow', category: 'permission', strength: 'must', actions: [{ type: 'allow', target: 'tuning' }] })
+    insertRule(f.rt, { ...common, id: 'permission-deny', category: 'permission', strength: 'must_not', actions: [{ type: 'deny', target: 'tuning' }] })
+    const conflict = (await f.api('/rules/conflicts?owner=u1')).body.items.find((c) => [c.a.id, c.b.id].includes('permission-allow') && [c.a.id, c.b.id].includes('permission-deny'))
+    assert.ok(conflict)
+    await f.post(`/rules/conflicts/${encodeURIComponent(conflict.key)}/resolve`, { owner: 'u1', resolution: 'disable_both' })
+    const out = await f.rt.checkAction({ owner: 'u1', well: { status: 'maintenance' }, action: { type: 'execute', target: 'tuning' } }, { authorized: true })
+    assert.equal(out.result, 'denied')
+    assert.equal(out.authorized, false)
+  } finally { await f.close() }
+})
+
+test('runtime 公开服务保留 task_id 范围与记忆规则版本', async () => {
+  const f = await fixture()
+  try {
+    insertMemory(f.rt, { id: 'task-memory', scope_type: 'task', scope_id: 'stable-task' })
+    insertRule(f.rt, { id: 'task-rule', scope_type: 'task', scope_id: 'stable-task' })
+    assert.equal(typeof f.rt.buildContext, 'function')
+    assert.equal(typeof f.rt.checkAction, 'function')
+    assert.equal(typeof f.rt.submitFeedback, 'function')
+    const ctx = await f.rt.buildContext({ owner: 'u1', task_id: 'stable-task', task: '可变任务描述', well: { status: 'maintenance' } })
+    assert.equal(ctx.sections.facts[0].version, 1)
+    assert.equal(ctx.sections.rules[0].version, 1)
+    assert.equal(ctx.sections.task_background.task, '可变任务描述')
+    assert.equal(ctx.sections.task_background.task_id, 'stable-task')
+    assert.equal(f.rt.submitFeedback({ owner: 'u1', run_id: ctx.run_id, feedback: 'ok' }).ok, true)
+  } finally { await f.close() }
+})
+
+test('反馈应用失败时插入与演进一同回滚', async () => {
+  const f = await fixture()
+  try {
+    insertRule(f.rt, { id: 'rollback-rule' })
+    f.rt.db.exec("CREATE TRIGGER fail_candidate BEFORE INSERT ON loop_rules BEGIN SELECT RAISE(ABORT, 'candidate failed'); END")
+    const out = await f.post('/feedback', { owner: 'u1', category: 'rule_content', rule_id: 'rollback-rule', correction: { text: 'new' } })
+    assert.equal(out.status, 400)
+    assert.equal(f.rt.db.prepare('SELECT COUNT(*) AS n FROM loop_feedback').get().n, 0)
+    assert.equal(f.rt.db.prepare('SELECT governance_status FROM loop_rules WHERE id=?').get('rollback-rule').governance_status, 'active')
+  } finally { await f.close() }
+})
+
+test('反馈拒绝跨 owner 的运行与目标且不留下记录', async () => {
+  const f = await fixture()
+  try {
+    const run = await f.post('/context', { owner: 'u10' })
+    insertRule(f.rt, { id: 'private-rule', owner: 'u10' })
+    const crossRun = await f.post('/feedback', { owner: 'u1', run_id: run.body.run_id })
+    assert.equal(crossRun.status, 403)
+    const crossTarget = await f.post('/feedback', { owner: 'u1', category: 'rule_content', rule_id: 'private-rule', correction: { text: 'changed' } })
+    assert.equal(crossTarget.status, 403)
+    assert.equal(f.rt.db.prepare('SELECT COUNT(*) AS n FROM loop_feedback').get().n, 0)
+  } finally { await f.close() }
+})
+
+test('运行归属精确匹配 owner 而不是正文或前缀', async () => {
+  const f = await fixture()
+  try {
+    const other = await f.post('/context', { owner: 'u10', instruction: 'u1' })
+    await f.post('/feedback', { run_id: other.body.run_id, feedback: 'u1' })
+    await f.post('/feedback', { owner: 'u10', feedback: 'standalone' })
+    assert.equal((await f.api('/runs?owner=u1')).body.items.length, 0)
+    assert.equal((await f.api('/feedback?owner=u1')).body.items.length, 0)
+  } finally { await f.close() }
+})
+
+test('动作超预算通过 HTTP 返回结构化 409', async () => {
+  const f = await fixture()
+  try {
+    insertMemory(f.rt, { type: 'constraint', text: '硬'.repeat(5000) })
+    const out = await f.post('/actions/check', { owner: 'u1', budget: 2000 })
+    assert.equal(out.status, 409)
+    assert.equal(out.body.error, 'hard_constraints_exceed_budget')
+  } finally { await f.close() }
+})
+
+test('建议按敏感性与起止有效期过滤', async () => {
+  const f = await fixture()
+  try {
+    insertMemory(f.rt, { id: 'secret-suggestion', status: 'proposed', sensitive: 1 })
+    insertMemory(f.rt, { id: 'expired-suggestion', status: 'proposed', valid_to: '2000-01-01' })
+    insertMemory(f.rt, { id: 'future-suggestion', status: 'needs_confirmation', valid_from: '2999-01-01' })
+    insertMemory(f.rt, { id: 'future-fact', valid_from: '2999-01-01' })
+    const ctx = await f.post('/context', { owner: 'u1' })
+    assert.equal(ctx.body.sections.suggestions.length, 0)
+    assert.equal(ctx.body.sections.facts.length, 0)
+    const sensitive = await f.post('/context', { owner: 'u1', include_sensitive: true })
+    assert.deepEqual(sensitive.body.sections.suggestions.map((m) => m.id), ['secret-suggestion'])
+  } finally { await f.close() }
+})
+
+test('硬规则不受数据库候选上限截断', async () => {
+  const f = await fixture()
+  try {
+    insertRule(f.rt, { id: 'old-rule', scope_type: 'personal' })
+    f.rt.db.prepare('UPDATE loop_rules SET updated_at=? WHERE id=?').run('2000-01-01', 'old-rule')
+    for (let i = 0; i < 205; i++) insertRule(f.rt, { scope_type: 'personal', scope_id: null, strength: 'prefer', actions: [] })
+    const ctx = await f.post('/context', { owner: 'u1', well: { status: 'maintenance' } })
+    assert.ok(ctx.body.sections.rules.some((r) => r.id === 'old-rule'))
+  } finally { await f.close() }
+})
+
+test('空检索仍保留排在软记忆后的全部硬约束', async () => {
+  const f = await fixture()
+  try {
+    insertMemory(f.rt, { id: 'old-hard', type: 'constraint', recorded_at: '2000-01-01T00:00:00.000Z' })
+    for (let i = 0; i < 405; i++) insertMemory(f.rt, { id: `soft-${i}` })
+    const ctx = await f.post('/context', { owner: 'u1', retrieval_limit: 1 })
+    assert.equal(ctx.status, 200)
+    assert.ok(ctx.body.sections.constraints.some((m) => m.id === 'old-hard'))
+  } finally { await f.close() }
 })

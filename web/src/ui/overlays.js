@@ -11,6 +11,7 @@ function cleanup() {
   activeCleanup = null
   if (fn) fn()
   const host = root()
+  host?.__memoryBrainClose?.()
   if (host) host.innerHTML = ''
   document.body.classList.remove('overlay-open')
 }
@@ -40,7 +41,7 @@ export function openSyncPopover(anchor, data = {}) {
   pop.className = 'popover'
   pop.innerHTML = `
     <h4>本机大脑 · 只读连接</h4>
-    <p>记忆只在本机登记、索引和检索；页面不会上传对话原文、位置或敏感内容。</p>
+    <p>记忆默认存放本机；抽取和向量化会把所需文本发送到已配置端点。远程端点的数据处理取决于对应服务。</p>
     <div class="pop-list">
       <span><i></i>对话原始与派生索引同源</span>
       <span><i></i>${esc(data.version || '0.2.0+12')} · READ ONLY</span>
@@ -122,8 +123,8 @@ export function openSettings({ data = {}, settings = {}, onChange = () => {}, on
         </section>
       </div>
       <div class="drawer-foot">
-        <b>记忆只在本机处理。</b>页面不会上传对话原文、位置信息或敏感内容。<br>
-        本面板为只读视图，所有写入由记忆服务箱机在后台完成。
+        <b>记忆默认存储在本机。</b>抽取和向量化按已配置端点处理所需文本。<br>
+        可在闭环工作区管理记忆、来源、规则和反馈。
       </div>
     </aside>`
   root().appendChild(wrap)
@@ -220,7 +221,7 @@ export function openLock(onUnlock) {
   wrap.innerHTML = `
     <div class="lock-card">
       <div class="lock-icon">${icons.lock}</div>
-      <h2>忆核大脑已锁定</h2>
+      <h2>脑内星河已锁定</h2>
       <p>记忆仍在本地运行，解锁后继续查看。</p>
       <button type="button" data-unlock>解锁并继续</button>
     </div>`

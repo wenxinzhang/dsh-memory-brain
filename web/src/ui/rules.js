@@ -30,8 +30,8 @@ export function openRules() {
       </div>
       <div class="rules-body" id="rules-body"></div>
       <div class="rules-foot">
-        默认使用本地 <b>Strata · qwen3.8-flash-next</b>；语料不会离开本机。
-        候选规则需要你点「采纳」才会进入规则库。
+        抽取使用已配置的模型端点；远程端点会接收选中的语料。
+        「采纳」后进入闭环规则中心的候选，补齐条件与动作并审核后生效。
       </div>
     </aside>`
 
@@ -47,6 +47,7 @@ export function openRules() {
   function closeExisting() {
     // overlays.js 的 cleanup 会把 overlay-root 清空；这里手动处理同类结构
     const root = document.getElementById('overlay-root')
+    root?.__memoryBrainClose?.()
     if (root) root.innerHTML = ''
     document.body.classList.remove('overlay-open')
   }
@@ -54,6 +55,7 @@ export function openRules() {
   function close() {
     if (closed) return
     closed = true
+    host.__memoryBrainClose = null
     if (pollTimer) clearInterval(pollTimer)
     document.removeEventListener('keydown', onKey)
     closeExisting()
@@ -63,6 +65,7 @@ export function openRules() {
     if (e.key === 'Escape') close()
   }
   document.addEventListener('keydown', onKey)
+  host.__memoryBrainClose = close
 
   function errorPage(message) {
     body.innerHTML = `

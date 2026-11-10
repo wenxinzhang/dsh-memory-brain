@@ -11,6 +11,7 @@ import { openRules } from './ui/rules.js'
 import { openLoop } from './ui/loop.js'
 import { esc, fmt, relTime, toneOfKind, toneClass } from './util.js'
 import { icons } from './ui/icons.js'
+import { selectMemoryWindow } from './memory-view.js'
 
 const stage = document.getElementById('stage')
 const canvas = document.getElementById('cortex-canvas')
@@ -37,9 +38,22 @@ const state = {
   },
   brain: null,
   panels: {},
+  windowLimit: 200,
+  graphMode: 'base',
 }
 
 let topbar, left, right, toolbar
+let panelHandlers
+
+function mountPanels(data,handlers) {
+  const previousTab=right?.getTab?.()
+  topbar=mountTopbar(document.getElementById('topbar'),data,handlers)
+  left=mountLeft(document.getElementById('panel-left'),data,handlers)
+  right=mountRight(document.getElementById('panel-right'),data,handlers)
+  toolbar=mountToolbar(document.getElementById('bottombar'),data,handlers)
+  if(previousTab) right?.selectTab?.(previousTab)
+  state.panels={topbar,left,right,toolbar};window.__PANELS=state.panels
+}
 
 /* ------------------------------------------------------------ 错误 */
 function fail(err) {
@@ -160,6 +174,16 @@ function openConsole() {
 }
 
 /* ------------------------------------------------------------ 数据刷新 */
+function applyMemoryView(limit=state.windowLimit) {
+  if (!state.data || state.graphMode !== 'base') return
+  state.windowLimit=limit
+  const result=selectMemoryWindow(state.data,{...state.filter,limit})
+  state.loaded=result.loaded;state.total=result.total
+  state.brain?.setData?.(result.graph)
+  left?.setLoaded?.(result.loaded,result.total)
+  right?.setLoaded?.(result.loaded,result.total)
+  return result
+}
 async function refresh(silent = false) {
   clearCache()
   const data = await loadAll()
@@ -167,9 +191,8 @@ async function refresh(silent = false) {
   state.loaded = Number(data.overview?.loaded ?? state.loaded)
   state.total = Number(data.overview?.total ?? state.total)
   window.__MEMORY_DATA = data
-  left?.setOverview(data.overview)
-  right?.setLoaded(state.loaded, state.total)
-  state.brain?.setData?.(data.graph)
+  if(panelHandlers) mountPanels({...data,overview:{...data.overview,timeRange:state.filter.range,memoryType:state.filter.type}},panelHandlers)
+  applyMemoryView()
   if (!silent) toast('已更新到最新状态')
 }
 
@@ -177,8 +200,11 @@ async function refresh(silent = false) {
 async function boot() {
   const data = await loadAll()
   state.data = data
+  const type=data.overview?.memoryType || '全部类型'
+  state.filter={range:data.overview?.timeRange || '最近30天',type,tone:({'事实':'fact','推理':'reasoning','后续/笔记':'followup'})[type] || 'all'}
   state.loaded = Number(data.overview?.loaded ?? data.memories?.length ?? 0)
   state.total = Number(data.overview?.total ?? state.loaded)
+  state.windowLimit=Math.max(1,state.loaded || 200)
   window.__MEMORY_DATA = data
 
   const handlers = {
@@ -205,7 +231,9 @@ async function boot() {
       if (item.id) state.brain?.select?.(String(item.id).startsWith('e') || String(item.id).startsWith('m') ? item.id : `m${item.id}`)
     },
     onFilter(f) {
+      if(state.graphMode!=='base') return toast('闭环图谱请使用图谱工作区内的范围筛选')
       state.filter = f
+      applyMemoryView()
       const map = { fact: '事实', reasoning: '推理', followup: '后续/笔记' }
       toast(`已切换：${f.range} · ${f.type || map[f.tone] || '全部类型'}`, 1500)
     },
@@ -213,11 +241,8 @@ async function boot() {
       await refresh()
     },
     async onLoadMore() {
-      const next = Math.min(state.total, state.loaded + 200)
-      state.loaded = next
-      left?.setLoaded?.(next)
-      right?.setLoaded?.(next, state.total)
-      return { loaded: next, total: state.total }
+      if(state.graphMode!=='base') { toast('闭环图谱请在图谱工作区调整查询范围');return {loaded:state.loaded,total:state.total} }
+      return applyMemoryView(state.windowLimit+200)
     },
     onFlow(on) {
       state.settings.flow = on
@@ -251,12 +276,8 @@ async function boot() {
     },
   }
 
-  topbar = mountTopbar(document.getElementById('topbar'), data, handlers)
-  left = mountLeft(document.getElementById('panel-left'), data, handlers)
-  right = mountRight(document.getElementById('panel-right'), data, handlers)
-  toolbar = mountToolbar(document.getElementById('bottombar'), data, handlers)
-  state.panels = { topbar, left, right, toolbar }
-  window.__PANELS = state.panels
+  panelHandlers=handlers
+  mountPanels(data,handlers)
 
   // 3D：默认隐藏舞台环/底座，只留脑体 + 光雾，对齐新设计
   setLoading(true, '正在加载记忆皮层…')
@@ -284,6 +305,7 @@ async function boot() {
       },
     })
     window.__BRAIN = state.brain
+    applyMemoryView()
     setLoading(false)
   } catch (e) {
     fail(e)
@@ -294,6 +316,7 @@ async function boot() {
 
   // ?ui=settings 直接打开设置，便于截图与验收
   if ((params.get('ui') || '').split(',').includes('settings')) openConsole()
+  if ((params.get('ui') || '').split(',').includes('graph')) openLoop({view:'graph'})
 }
 
 boot().catch(fail)
@@ -310,11 +333,12 @@ window.__MB_SET_GRAPH__ = async (mode = 'loop', opts = {}) => {
     const res = await fetch(`${apiBase}/loop/graph?${qs}`, { cache: 'no-store' })
     const data = await res.json()
     if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    state.graphMode='loop'
     state.brain?.setData?.({ nodes: data.nodes, edges: data.edges, memories: [] })
     return data.counts
   }
-  const base = state.data?.graph || { nodes: [], edges: [], memories: [] }
-  state.brain?.setData?.(base)
+  state.graphMode='base'
+  const base = applyMemoryView()?.graph || {nodes:[],edges:[],memories:[]}
   return { nodes: base.nodes?.length || 0, edges: base.edges?.length || 0 }
 }
 

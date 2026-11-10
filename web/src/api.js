@@ -60,6 +60,7 @@ export async function loadAll() {
   } catch (e) {
     console.info('[api] API 不可用，使用静态 payload：', e.message)
     data = await fallbackPayload()
+    data = {...data,status:{...data.status,connected:false,degraded:true,syncLabel:'服务不可用 · 静态回退',error:e.message}}
   }
   cache = normalize(data)
   return cache
