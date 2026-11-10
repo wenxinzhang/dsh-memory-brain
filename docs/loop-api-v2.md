@@ -179,3 +179,25 @@ loopEmbedEnabled: true
 - 上下文检索：owner/项目/任务/时间/状态过滤 → 词法召回 → 可选向量召回（query embedding）→ 合并去重重排 → 预算。硬约束（must/must_not/constraint）始终确定性保留。
 - `sections.retrieval.vector = {configured, used, model, dimension, query_embedded, matched, error}`；未配置/不可用/冷却时显式降级，不伪造向量。
 - embedding 调用只发送记忆文本与 query，不默认外传完整历史；端点必须显式配置。
+
+## 规则审核三档模式（v5）
+
+`loop_runtime_settings` 持久化 `rule_review_mode`；页面切换优先于 host 配置
+`loopRuleReviewMode`（默认 `semi`）。
+
+| 模式 | 行为 |
+|---|---|
+| `auto` 全自动 | AI 提炼的规则只要**结构校验无错误**就自动生效（`governance_status='active'`，`confirmation='auto_approved'`，写入规则版本与审计 `rule.auto_approved`）；条件有错误的仍保留候选 |
+| `semi` 半自动（默认） | 普通规则（偏好/工作流等，非硬性、非高影响范围）自动生效；**重要规则必须人工**：分类为业务约束/权限/数据校验/状态迁移，或强度 must/must_not，或范围 artifact/domain |
+| `manual` 手动 | AI 只产出候选，全部由用户在规则中心确认后生效 |
+
+- 无条件规则视为“始终适用”，属于结构合法；条件含未定义本体路径等错误则任何模式都不自动生效。
+- 自动生效同样进入既有治理：可暂停/归档/版本/冲突裁决；审计记录 `review_mode` 与 `review_reasons`。
+- 对**之后**的提炼生效，不追溯改变已有候选/生效规则。
+
+接口：
+
+- `GET /rules/review-mode` → `{ ok, mode, name, description, modes:[{id,name,description}] }`
+- `POST /rules/review-mode` body `{ mode:'auto'|'semi'|'manual' }` → `{ ok, mode, previous, name, description }`；非法值 400；审计 `rule.review_mode`
+- 拆解批次 chunk 计数新增 `rules_auto_approved`。
+- `simulateRule`：无条件规则现在返回 `applicable`（无条件，始终适用）；此前无条件规则即使生效也永远不会进入上下文。

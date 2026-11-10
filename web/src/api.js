@@ -275,6 +275,8 @@ export const loopOntologyVersionDiff = (id) => loop(`/ontology/versions/${encode
 export const loopRollbackOntology = (id, body) => loopPost(`/ontology/versions/${encodeURIComponent(id)}/rollback`, body)
 export const loopResolveConflict = (key, body) => loopPost(`/rules/conflicts/${encodeURIComponent(key)}/resolve`, body)
 export const loopEmbeddingStatus = (query = '') => loop(`/embeddings/status${query}`)
+export const loopReviewMode = () => loop('/rules/review-mode')
+export const loopSetReviewMode = (mode) => loopPost('/rules/review-mode', { mode })
 export const loopReindexEmbeddings = (body = {}) => loopPost('/embeddings/reindex', body)
 export const loopActionCheck = (body) => loopPost('/actions/check', body)
 export const loopActions = (query = '') => loop(`/actions${query}`)

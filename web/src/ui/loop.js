@@ -304,6 +304,8 @@ export function openLoop(options = {}) {
     loading: {},
     viewError: {},
     busy: false,
+    reviewMode: null,
+    reviewModes: null,
     forms: {
       import: {
         owner: 'local-user', project: '', task: '', platform: '',
@@ -552,6 +554,7 @@ export function openLoop(options = {}) {
     const f = state.filters.rules
     const out = await api.loopRules(qs({ status: f.status, view: f.view === 'all' ? undefined : f.view }))
     state.rules = (out.items || []).map(normalizeRule)
+    if (!state.reviewModes) { try { const rm = await api.loopReviewMode(); state.reviewMode = rm.mode; state.reviewModes = rm.modes } catch { /* 模式条缺失不影响规则列表 */ } }
     if (f.view === 'conflicts') await fetchRuleConflicts()
   }
   async function fetchSkills() {
@@ -1356,6 +1359,17 @@ export function openLoop(options = {}) {
 
   /* ---------------------------------------------------------------- 规则视图 */
 
+  const REVIEW_FALLBACK = [{ id: 'auto', name: '全自动' }, { id: 'semi', name: '半自动' }, { id: 'manual', name: '手动' }]
+  function reviewModeButtons() {
+    const modes = state.reviewModes && state.reviewModes.length ? state.reviewModes : REVIEW_FALLBACK
+    return modes.map((m) => `<button class="loop-btn loop-btn-sm ${state.reviewMode === m.id ? 'is-on' : ''}" type="button" data-loop-action="review-mode" data-id="${m.id}" title="${esc(m.description || '')}">${esc(m.name)}</button>`).join('')
+  }
+  function reviewModeHint() {
+    const cur = (state.reviewModes || []).find((m) => m.id === state.reviewMode)
+    if (!cur) return '规则默认候选；确认后才会进入上下文。编辑会写入版本并标记 human_edited。'
+    return `当前「${cur.name}」：${cur.description}切换后对之后 AI 提炼的规则生效，已存在的候选不受影响。`
+  }
+
   function rulesView() {
     const f = state.filters.rules
     const conflictMode = f.view === 'conflicts'
@@ -1367,7 +1381,11 @@ export function openLoop(options = {}) {
           <select data-filter="rules.status">${opt('', '全部状态', f.status)}${Object.entries(GOVERNANCE).map(([k, v]) => opt(k, v, f.status)).join('')}</select>
           <button class="loop-btn loop-btn-sm" type="button" data-loop-action="rules">刷新</button>
         </div>
-        <div class="loop-hint">规则默认候选；确认后才会进入上下文。编辑会写入版本并标记 human_edited。</div>
+        <div class="loop-toolbar loop-toolbar-wrap" style="margin-top:8px">
+          <span class="loop-kv-key">规则审核模式</span>
+          ${reviewModeButtons()}
+        </div>
+        <div class="loop-hint">${reviewModeHint()}</div>
       </div>
       ${conflictMode ? `<div class="loop-card"><div class="loop-card-title">冲突（GET /rules/conflicts）</div>${ruleConflictsHtml()}</div>` : ''}
       <div class="loop-list">${state.rules.length ? state.rules.map(ruleCard).join('') : emptyBlock(conflictMode ? '没有冲突规则。' : '还没有规则。导入对话并拆解，或在规则中心确认候选。')}</div>`
@@ -2597,6 +2615,15 @@ export function openLoop(options = {}) {
 
     /* ---------- 规则 ---------- */
     if (act === 'rules') { await refreshRulesView(); return }
+    if (act === 'review-mode') {
+      try {
+        const out = await api.loopSetReviewMode(id)
+        state.reviewMode = out.mode
+        toast(`审核模式已切换为「${out.name}」：${out.description}`)
+        render()
+      } catch (e) { setOpError('review-mode', e); render() }
+      return
+    }
     if (act === 'resolve-conflict') {
       const resolution = el.dataset.resolution
       const key = id

@@ -12,7 +12,7 @@ import { createLoopRuntime } from '../lib/loop.js'
 // Exercise the actual host router with only the external configuration-schema builder stubbed.
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 let source = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8')
-source = source.replace("import z from '@deepseek-ai/schemastery'", `const field = () => ({ description() { return this }, default() { return this } }); const z = { object: x => x, string: field, number: field, boolean: field }`)
+source = source.replace("import z from '@deepseek-ai/schemastery'", `const field = () => ({ description() { return this }, default() { return this } }); const z = { object: x => x, string: field, number: field, boolean: field, enum: () => field() }`)
 source = source.replace(/from '(\.\/[^']+)'/g, (_, p) => `from '${pathToFileURL(resolve(packageRoot, 'lib', p)).href}'`)
 source = source.replace("fileURLToPath(new URL('../web', import.meta.url))", JSON.stringify(join(packageRoot, 'web')))
 const { apply } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'))
