@@ -15,12 +15,59 @@ async function probe(options = {}) {
     useCallback: (fn) => fn, useEffect: fn => effects.push(fn),
   }
   const window = { location: { protocol: 'http:', origin: 'http://localhost', search: '', ...options.location }, addEventListener() {}, removeEventListener() {}, fetch: options.fetch || (() => {}) }
-  let plugin; const views = new Map()
+  let plugin; const views = new Map();const listeners=new Map();const disposers=[]
+  let rows=options.hostRows || [{moduleName:'@dafeiyu/dsh-memory-brain',enabled:true,fiberPhase:'active'}]
+  const install=effect=>{
+    if(typeof effect==='function')return effect
+    if(effect && typeof effect[Symbol.iterator]==='function'){const undo=[...effect].filter(value=>typeof value==='function');return ()=>undo.reverse().forEach(fn=>fn())}
+    return ()=>{}
+  }
+  const listen=(name,fn)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name).add(fn);return ()=>listeners.get(name)?.delete(fn)}
   window.__ModuleLoader__ = { load({ factory }) { plugin = factory((id) => id === 'react' ? React : {}) } }
   vm.runInNewContext(source, { window, URL, URLSearchParams, fetch: window.fetch, localStorage: { getItem() {}, setItem() {} }, console, setInterval, clearInterval })
-  await plugin.apply({ slots: { inject: (_, fn) => fn(), register: (meta, component) => views.set(meta.id, component) } })
-  return { ...window.__memoryBrainClientTest, views, window, effects, updates }
+  await plugin.apply({
+    slots: {inject:(_,fn)=>install(fn()),register:(meta,component)=>{views.set(meta.id,component);return ()=>views.delete(meta.id)}},
+    remote:{pluginManager:{listPlugins:async()=>({ok:true,value:rows})},$on:listen},
+    remoteAccess:{whenAccess:(_,fn)=>install(fn())},on:listen,
+    effect:fn=>{const undo=install(fn());disposers.push(undo);return undo},
+  })
+  return { ...window.__memoryBrainClientTest, views, window, effects, updates,
+    async hostRows(next){rows=next;await Promise.all([...(listeners.get('plugin-manager/changed') || [])].map(fn=>fn()))},
+    dispose(){disposers.reverse().forEach(fn=>fn())},listeners,
+  }
 }
+
+test('disabling the host plugin removes both tabs and enabling it restores a single pair',async()=>{
+ const api=await probe()
+ assert.equal(api.views.size,2)
+ await api.hostRows([{moduleName:'@dafeiyu/dsh-memory-brain',enabled:false,fiberPhase:null}])
+ assert.equal(api.views.size,0)
+ await api.hostRows([{moduleName:'@dafeiyu/dsh-memory-brain',enabled:true,fiberPhase:'active'}])
+ assert.equal(api.views.size,2)
+ api.dispose();assert.equal(api.views.size,0)
+ assert.equal(api.listeners.get('plugin-manager/changed')?.size || 0,0)
+})
+
+test('an initially disabled host never mounts views or requests its removed HTTP routes',async()=>{
+ const requests=[]
+ const api=await probe({hostRows:[],fetch:async path=>{requests.push(path);return {ok:false,status:404}}})
+ assert.equal(api.views.size,0);assert.equal(requests.length,0)
+ api.dispose()
+})
+
+test('a late configuration response cannot restore tabs after the host was disabled',async()=>{
+ const api=await probe({hostRows:[]})
+ let release
+ api.window.fetch=()=>new Promise(resolve=>{release=resolve})
+ const enabling=api.hostRows([{moduleName:'@dafeiyu/dsh-memory-brain',enabled:true,fiberPhase:'active'}])
+ await new Promise(resolve=>setTimeout(resolve,5))
+ assert.equal(typeof release,'function')
+ await api.hostRows([])
+ release({ok:true,json:async()=>({ok:true,prefix:'/memory-brain'})})
+ await enabling
+ assert.equal(api.views.size,0)
+ api.dispose()
+})
 
 test('client synthetic probe exposes sent-record normalization and stable mode key', async () => {
   const api = await probe()

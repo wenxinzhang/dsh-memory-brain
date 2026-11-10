@@ -176,7 +176,7 @@ node tools/loop-e2e.mjs http://127.0.0.1:18912/ /tmp/loop-shots
 node tools/loop-e2e-manage.mjs http://127.0.0.1:18912/ /tmp/loop-manage
 ```
 
-当前自动化验证为 143 项测试通过，覆盖导入、范围隔离、规则权限、调用预算、自动聊天抽取、归档撤回和前端交互。宿主接入与真实环境验证边界见 [模型接入说明](docs/model-integration.md)。历史浏览器验收记录见 [verification-v3.md](docs/verification-v3.md)，属于其记录版本。
+当前自动化验证为 146 项测试通过，覆盖导入、范围隔离、规则权限、调用预算、自动聊天抽取、归档撤回、插件停用清理和前端交互。宿主接入与真实环境验证边界见 [模型接入说明](docs/model-integration.md)。历史浏览器验收记录见 [verification-v3.md](docs/verification-v3.md)，属于其记录版本。
 
 ## 文档
 
