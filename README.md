@@ -185,6 +185,7 @@ node tools/loop-e2e-manage.mjs http://127.0.0.1:18912/ /tmp/loop-manage
 - [API 契约](docs/loop-api-v2.md)
 - [验收记录 v3](docs/verification-v3.md)
 - [数据政策](DATA-POLICY.md)
+- [上游提案：工具布尔参数容错](docs/upstream-dsh-boolean-args.md)
 
 ## 许可证
 
