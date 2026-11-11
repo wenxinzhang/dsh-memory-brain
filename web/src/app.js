@@ -27,7 +27,7 @@ const state = {
   data: null,
   loaded: 0,
   total: 0,
-  filter: { range: '最近30天', type: '全部类型', tone: 'all' },
+  filter: { range: '全部时间', type: '全部类型', tone: 'all' },
   settings: {
     flow: !still,
     spin: !still,
@@ -66,6 +66,7 @@ function fail(err) {
 function setLoading(on, text) {
   if (!loading) return
   loading.classList.toggle('is-hidden', !on)
+  if (on) loading.classList.remove('is-error')
   if (text) {
     const t = loading.querySelector('.ml-text')
     if (t) t.textContent = text
@@ -201,7 +202,7 @@ async function boot() {
   const data = await loadAll()
   state.data = data
   const type=data.overview?.memoryType || '全部类型'
-  state.filter={range:data.overview?.timeRange || '最近30天',type,tone:({'事实':'fact','推理':'reasoning','后续/笔记':'followup'})[type] || 'all'}
+  state.filter={range:data.overview?.timeRange || '全部时间',type,tone:({'事实':'fact','推理':'reasoning','后续/笔记':'followup'})[type] || 'all'}
   state.loaded = Number(data.overview?.loaded ?? data.memories?.length ?? 0)
   state.total = Number(data.overview?.total ?? state.loaded)
   state.windowLimit=Math.max(1,state.loaded || 200)
@@ -233,9 +234,9 @@ async function boot() {
     onFilter(f) {
       if(state.graphMode!=='base') return toast('闭环图谱请使用图谱工作区内的范围筛选')
       state.filter = f
-      applyMemoryView()
+      const result = applyMemoryView()
       const map = { fact: '事实', reasoning: '推理', followup: '后续/笔记' }
-      toast(`已切换：${f.range} · ${f.type || map[f.tone] || '全部类型'}`, 1500)
+      toast(`已切换：${f.range} · ${f.type || map[f.tone] || '全部类型'}${result?.unknownTime ? ` · 含时间未知 ${result.unknownTime} 条` : ''}`, 1500)
     },
     async onRefresh() {
       await refresh()
@@ -341,6 +342,7 @@ window.__MB_SET_GRAPH__ = async (mode = 'loop', opts = {}) => {
   const base = applyMemoryView()?.graph || {nodes:[],edges:[],memories:[]}
   return { nodes: base.nodes?.length || 0, edges: base.edges?.length || 0 }
 }
+window.__MB_GET_GRAPH_MODE__ = () => state.graphMode
 
 // 供 QA 工具读取
 window.__APP = {

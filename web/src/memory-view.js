@@ -9,9 +9,15 @@ export function selectMemoryWindow(data, {range='全部时间',tone='all',limit=
   }
   const days=Number(String(range).match(/(\d+)天/)?.[1])
   const toneOf = row => row.tone || (['fact','reasoning','followup'].includes(row.kind)?row.kind:toneOfKind(row.kind || row.type))
-  const rows=[...merged.values()].filter(row => (tone==='all' || toneOf(row)===tone)
-    && (!days || (timestamp(row)>=now-days*86400000 && timestamp(row)<=now)))
+  // 时间未知的记录无法判断是否在窗口内：保留（排在末尾）并单独计入 unknownTime。
+  const inWindow = row => {
+    if (!days) return true
+    const ts=timestamp(row)
+    return !Number.isFinite(ts) || (ts>=now-days*86400000 && ts<=now)
+  }
+  const rows=[...merged.values()].filter(row => (tone==='all' || toneOf(row)===tone) && inWindow(row))
     .sort((a,b)=>(timestamp(b)||0)-(timestamp(a)||0))
+  const unknownTime=rows.filter(row=>!Number.isFinite(timestamp(row))).length
   const memories=rows.slice(0,Math.max(0,limit))
-  return {total:rows.length,loaded:memories.length,graph:{...(data.graph || {}),memories}}
+  return {total:rows.length,loaded:memories.length,unknownTime,graph:{...(data.graph || {}),memories}}
 }

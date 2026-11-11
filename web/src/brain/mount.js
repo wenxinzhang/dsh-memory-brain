@@ -62,18 +62,17 @@ function show(msg, isError = false) {
     if (isError) console.error('[brain]', msg);
     return;
   }
-  el.textContent = msg;
-  el.style.display = 'block';
+  const text = el.querySelector('.ml-text');
+  if (text) text.textContent = msg;
+  else el.textContent = msg;
+  el.classList.remove('is-hidden');
+  el.classList.toggle('is-error', isError);
   el.dataset.state = isError ? 'error' : 'loading';
-  if (isError) {
-    el.style.color = '#ffb0b0';
-    el.style.borderColor = '#7a3030';
-  }
 }
 
 function hide() {
   const el = loadingEl();
-  if (el) el.style.display = 'none';
+  if (el) el.classList.add('is-hidden');
 }
 
 function errText(e) {

@@ -45,9 +45,9 @@
     "THIRD-PARTY-NOTICES.md"
   ],
   "scripts": {
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/loop.js && node --check lib/context-compiler.js && node --check lib/execution-store.js && node --check lib/dsh-integration.js",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/rules.js && node --check lib/loop.js && node --check lib/context-compiler.js && node --check lib/execution-store.js && node --check lib/dsh-integration.js",
     "test": "node --test tests/*.test.mjs",
-    "prepack": "node --check lib/index.js && node --check lib/client.js && node --check lib/loop.js && node --check lib/context-compiler.js && node --check lib/execution-store.js && node --check lib/dsh-integration.js"
+    "prepack": "node --check lib/index.js && node --check lib/client.js && node --check lib/rules.js && node --check lib/loop.js && node --check lib/context-compiler.js && node --check lib/execution-store.js && node --check lib/dsh-integration.js"
   },
   "dsh": {
     "bundle": {

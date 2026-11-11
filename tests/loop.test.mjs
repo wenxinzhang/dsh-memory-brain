@@ -984,7 +984,7 @@ test('反馈应用失败时插入与演进一同回滚', async () => {
     insertRule(f.rt, { id: 'rollback-rule' })
     f.rt.db.exec("CREATE TRIGGER fail_candidate BEFORE INSERT ON loop_rules BEGIN SELECT RAISE(ABORT, 'candidate failed'); END")
     const out = await f.post('/feedback', { owner: 'u1', category: 'rule_content', rule_id: 'rollback-rule', correction: { text: 'new' } })
-    assert.equal(out.status, 400)
+    assert.equal(out.status, 500)
     assert.equal(f.rt.db.prepare('SELECT COUNT(*) AS n FROM loop_feedback').get().n, 0)
     assert.equal(f.rt.db.prepare('SELECT governance_status FROM loop_rules WHERE id=?').get('rollback-rule').governance_status, 'active')
   } finally { await f.close() }

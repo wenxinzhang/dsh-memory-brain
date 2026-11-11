@@ -25,6 +25,8 @@ const STATUS_LABEL = {
   proposed: '候选', needs_confirmation: '待确认', confirmed: '已确认', superseded: '已被替代',
   conflict: '冲突', archived: '已归档', deleted: '已删除',
 }
+const SCOPE_LABEL = { personal: '个人', project: '项目', task: '任务', artifact: '业务对象', domain: '领域' }
+const STRUCTURE_LABEL = { structured: '已结构化', unstructured: '待整理', invalid_condition: '条件无效' }
 const ROLE_LABEL = { user: '用户', assistant: '助手', system: '系统', tool: '工具', unknown: '未知' }
 const ROLES = ['user', 'assistant', 'system', 'tool', 'unknown']
 const STRENGTH = { must: '必须', must_not: '禁止', prefer: '偏好', suggest: '建议' }
@@ -299,6 +301,7 @@ export function openLoop(options = {}) {
   const draft = readDraft()
 
   const state = {
+    owner: String(savedForms.owner || savedForms.import?.owner || savedFilters.graph?.owner || '').trim() || 'local-user',
     overview: null,
     view: initialView,
     loading: {},
@@ -308,13 +311,13 @@ export function openLoop(options = {}) {
     reviewModes: null,
     forms: {
       import: {
-        owner: 'local-user', project: '', task: '', platform: '',
+        project: '', task: '', platform: '',
         externalConversationId: '', title: '', filename: '', format: 'auto', autoExtract: '1',
         text: draft || '', ...(savedForms.import || {}),
       },
       skills: { project: '', min_memories: '3', ...(savedForms.skills || {}) },
       context: {
-        owner: 'local-user', project: '', task: '', instruction: '', budget: '', includeSensitive: false, query: '',
+        project: '', task: '', instruction: '', budget: '', includeSensitive: false, query: '',
         object: '{"object":{"name":"WELL_001"},"well":{"status":"maintenance"},"request":{"type":"solution"}}',
         ...(savedForms.context || {}),
       },
@@ -328,7 +331,7 @@ export function openLoop(options = {}) {
       memory: { type: '', status: '', scope_type: '', source_id: '', q: '', ...(savedFilters.memory || {}) },
       rules: { view: 'all', status: '', ...(savedFilters.rules || {}) },
       skills: { status: '', ...(savedFilters.skills || {}) },
-      graph: { owner: 'local-user', project: '', ...(savedFilters.graph || {}) },
+      graph: { project: '', ...(savedFilters.graph || {}) },
     },
     file: null,
     fileReading: false,
@@ -347,9 +350,6 @@ export function openLoop(options = {}) {
     batches: [],
     batchSource: '',
     batchesError: null,
-    extractStarting: {},
-    extractResults: {},
-    extractErrors: {},
     sourceDetail: null,
     memories: [],
     memSelected: new Set(),
@@ -368,6 +368,7 @@ export function openLoop(options = {}) {
     instDetails: {},
     opErrors: {},
     rules: [],
+    feedbackRules: [],
     ruleConflicts: [],
     conflictNotes: {},
     ruleConflictsLoading: false,
@@ -398,8 +399,13 @@ export function openLoop(options = {}) {
     graphPage: 0,
     graphLayout: null,
     graphLayoutKey: '',
-    graphProjection: 'base',
+    graphProjection: typeof window.__MB_GET_GRAPH_MODE__ === 'function' && window.__MB_GET_GRAPH_MODE__() === 'loop' ? 'loop' : 'base',
   }
+  delete state.forms.import.owner
+  delete state.forms.context.owner
+  delete state.filters.graph.owner
+  if (!SCOPE_LABEL[state.filters.memory.scope_type]) state.filters.memory.scope_type = ''
+  let ownerApplied = state.owner
 
   // localStorage 草稿优先于旧会话表单（会话里不保存大文本）
   if (!state.forms.import.text) state.forms.import.text = draft
@@ -429,6 +435,7 @@ export function openLoop(options = {}) {
   const persistForms = () => {
     try {
       const copy = {
+        owner: state.owner,
         import: { ...state.forms.import },
         skills: state.forms.skills,
         context: state.forms.context,
@@ -481,6 +488,18 @@ export function openLoop(options = {}) {
   document.addEventListener('keydown', onKey)
   root.__memoryBrainClose = close
 
+  /* ---------------------------------------------------------------- owner / 请求序号 */
+
+  const ownerValue = () => String(state.owner || '').trim() || 'local-user'
+  const ownerQs = (params = {}) => qs({ ...params, owner: ownerValue() })
+  const withOwner = (body = {}) => ({ ...body, owner: ownerValue() })
+  // 同一类请求只采用最后一次发出的响应；较早的慢响应返回时直接丢弃。
+  const requestSeq = {}
+  const latest = (key) => {
+    const n = (requestSeq[key] = (requestSeq[key] || 0) + 1)
+    return () => !closed && requestSeq[key] === n
+  }
+
   /* ---------------------------------------------------------------- 通用渲染 */
 
   function stats() {
@@ -520,7 +539,7 @@ export function openLoop(options = {}) {
 
   async function refreshImports(throwOnError = false) {
     try {
-      const out = await api.loopImports()
+      const out = await api.loopImports(ownerQs())
       state.imports = out.items || []
       state.viewError.import = null
     } catch (e) {
@@ -529,56 +548,73 @@ export function openLoop(options = {}) {
     }
   }
   async function refreshOverview() {
-    try { state.overview = await api.loopOverview() } catch { /* 概览失败不阻塞视图 */ }
+    try { state.overview = await api.loopOverview(ownerQs()) } catch { /* 概览失败不阻塞视图 */ }
   }
-  async function fetchMemories() {
+  /** 返回 false 表示响应已过期、未写入 state。 */
+  async function fetchLatest(key, request, apply) {
+    const current = latest(key)
+    let out
+    try { out = await request() } catch (e) {
+      if (!current()) return false
+      throw e
+    }
+    if (!current()) return false
+    apply(out)
+    return true
+  }
+  function fetchMemories() {
     const f = state.filters.memory
-    const out = await api.loopMemories(qs({
+    return fetchLatest('memories', () => api.loopMemories(ownerQs({
       type: f.type, status: f.status, scope_type: f.scope_type, source_id: f.source_id, q: f.q,
-    }))
-    state.memories = out.items || []
+    })), (out) => { state.memories = out.items || [] })
   }
   async function fetchRuleConflicts() {
     state.ruleConflictsLoading = true
     try {
-      const out = await api.loopRuleConflicts()
-      state.ruleConflicts = out.items || []
-      state.ruleConflictsError = null
+      await fetchLatest('rule-conflicts', () => api.loopRuleConflicts(ownerQs()), (out) => {
+        state.ruleConflicts = out.items || []
+        state.ruleConflictsError = null
+        state.ruleConflictsLoading = false
+      })
     } catch (e) {
       state.ruleConflictsError = e
-    } finally {
       state.ruleConflictsLoading = false
     }
   }
   async function fetchRules() {
     const f = state.filters.rules
-    const out = await api.loopRules(qs({ status: f.status, view: f.view === 'all' ? undefined : f.view }))
-    state.rules = (out.items || []).map(normalizeRule)
+    const fresh = await fetchLatest('rules', () => api.loopRules(ownerQs({ status: f.status, view: f.view === 'all' ? undefined : f.view })), (out) => {
+      state.rules = (out.items || []).map(normalizeRule)
+    })
+    if (!fresh) return false
     if (!state.reviewModes) { try { const rm = await api.loopReviewMode(); state.reviewMode = rm.mode; state.reviewModes = rm.modes } catch { /* 模式条缺失不影响规则列表 */ } }
     if (f.view === 'conflicts') await fetchRuleConflicts()
+    return true
   }
-  async function fetchSkills() {
-    const out = await api.loopSkills(qs({ status: state.filters.skills.status }))
-    state.skills = out.items || []
+  function fetchSkills() {
+    return fetchLatest('skills', () => api.loopSkills(ownerQs({ status: state.filters.skills.status })), (out) => { state.skills = out.items || [] })
   }
   async function fetchGraph() {
     const f = state.filters.graph
     try {
-      state.graph = await api.loopGraph(qs({ owner: f.owner, project: f.project, limit: 150 }))
-      state.graphError = null
-      state.graphLayout = null
-      state.graphLayoutKey = ''
-      state.graphPage = 0
-      state.graphSelected = null
+      return await fetchLatest('graph', () => api.loopGraph(ownerQs({ project: f.project, limit: 150 })), (out) => {
+        state.graph = out
+        state.graphError = null
+        state.graphLayout = null
+        state.graphLayoutKey = ''
+        state.graphPage = 0
+        state.graphSelected = null
+      })
     } catch (e) {
       state.graphError = e
+      return true
     }
   }
   async function refreshRunsAndFeedback() {
     const [runs, fbs, acts] = await Promise.all([
-      api.loopRuns().catch(() => null),
-      api.loopFeedbackList('?limit=20').catch(() => null),
-      api.loopActions('?limit=10').catch(() => null),
+      api.loopRuns(ownerQs()).catch(() => null),
+      api.loopFeedbackList(ownerQs({ limit: 20 })).catch(() => null),
+      api.loopActions(ownerQs({ limit: 10 })).catch(() => null),
     ])
     if (runs) state.runs = runs.items || []
     if (fbs) state.feedbacks = fbs.items || []
@@ -588,18 +624,19 @@ export function openLoop(options = {}) {
   async function loadViewData(v) {
     if (v === 'import') { await refreshImports(true); await refreshJobs() }
     else if (v === 'memory') await fetchMemories()
-    else if (v === 'ontology') { state.ontology = await api.loopOntology(); await refreshOntologyVersions() }
+    else if (v === 'ontology') { state.ontology = await api.loopOntology(ownerQs()); await refreshOntologyVersions() }
     else if (v === 'rules') await fetchRules()
     else if (v === 'skills') await fetchSkills()
     else if (v === 'context') {
       await refreshRunsAndFeedback()
       await refreshVectorStatus()
-      try { state.rules = ((await api.loopRules()).items || []).map(normalizeRule) } catch { /* 反馈的 rule_id 下拉可为空 */ }
+      try { state.feedbackRules = ((await api.loopRules(ownerQs())).items || []).map(normalizeRule) } catch { /* 反馈的 rule_id 下拉可为空 */ }
     }
     else if (v === 'graph') await fetchGraph()
   }
 
   async function loadView(v, { showLoading = true } = {}) {
+    const current = latest('view')
     state.viewError[v] = null
     if (showLoading) {
       state.loading[v] = true
@@ -608,9 +645,10 @@ export function openLoop(options = {}) {
     try {
       await loadViewData(v)
     } catch (e) {
+      if (!current()) return
       state.viewError[v] = e
     }
-    if (closed) return
+    if (!current()) return
     state.loading[v] = false
     await refreshOverview()
     render()
@@ -632,7 +670,7 @@ export function openLoop(options = {}) {
       if (pollBusy) return
       pollBusy = true
       try {
-        const out = await api.loopBatches(`?source_id=${encodeURIComponent(sourceId)}&limit=20`)
+        const out = await api.loopBatches(ownerQs({ source_id: sourceId, limit: 20 }))
         state.batches = out.items || []
         state.batchesError = null
         updateBatchPanel()
@@ -686,7 +724,7 @@ export function openLoop(options = {}) {
         </div>
         <div class="loop-grid">
           <label>格式<select data-f="import.format">${opt('auto', '自动识别', f.format)}${opt('json', 'JSON', f.format)}${opt('text', 'Markdown / TXT', f.format)}</select></label>
-          <label>归属用户<input data-f="import.owner" value="${esc(f.owner)}" placeholder="local-user"></label>
+          <label>归属用户<input data-owner value="${esc(state.owner)}" placeholder="local-user"></label>
           <label>项目<input data-f="import.project" value="${esc(f.project)}" placeholder="可留空"></label>
           <label>任务<input data-f="import.task" value="${esc(f.task)}" placeholder="可留空"></label>
           <label>平台<input data-f="import.platform" value="${esc(f.platform)}" placeholder="如 chatgpt / dsh"></label>
@@ -879,7 +917,7 @@ export function openLoop(options = {}) {
 
   async function refreshJobs() {
     try {
-      const out = await api.loopJobs('?limit=20')
+      const out = await api.loopJobs(ownerQs({ limit: 20 }))
       state.jobs = out.items || []
       state.jobError = null
     } catch (e) { state.jobError = e }
@@ -896,7 +934,7 @@ export function openLoop(options = {}) {
     state.jobPollId = jobId
     const tick = async () => {
       try {
-        const out = await api.loopJob(jobId)
+        const out = await api.loopJob(jobId, ownerQs())
         state.jobDetail = out.job
         state.jobError = null
         const el = bodyEl.querySelector('#loop-job-panel')
@@ -950,28 +988,14 @@ export function openLoop(options = {}) {
   }
 
   function batchPanelHtml() {
-    if (!state.batchSource && !state.batches.length && !state.batchesError && !Object.keys(state.extractResults).length) return ''
-    const starting = !!state.extractStarting[state.batchSource]
-    const extract = state.extractResults[state.batchSource]
-    const extractErr = state.extractErrors[state.batchSource]
+    if (!state.batchSource && !state.batches.length && !state.batchesError) return ''
     return `<div class="loop-card">
       <div class="loop-card-title">拆解批次进度${state.batchSource ? ` · ${esc(state.batchSource)}` : ''}
         <button class="loop-btn loop-btn-sm" type="button" data-loop-action="batch-panel-close">收起</button></div>
-      ${starting ? '<div class="loop-hint">已发起拆解请求（同步执行中），正在并行轮询 GET /batches …</div>' : ''}
       ${state.batchesError ? errorHtml(state.batchesError) : ''}
-      ${extractErr ? errorHtml(extractErr) : ''}
       ${state.batches.length
         ? `<div class="loop-list">${state.batches.map(batchRow).join('')}</div>`
-        : (starting ? loadingBlock('等待批次记录…') : emptyBlock('还没有批次记录。'))}
-      ${extract ? `<div class="loop-section-title">上次拆解结果</div><div class="loop-kv">
-        <span>新增记忆</span><b>${fmt(extract.memories_added || 0)}</b>
-        <span>重复记忆</span><b>${fmt(extract.memories_duplicate || 0)}</b>
-        <span>冲突</span><b>${fmt(extract.conflicts || 0)}</b>
-        <span>新增规则</span><b>${fmt(extract.rules_added || 0)}</b>
-        <span>候选结构</span><b>${fmt(extract.proposals || 0)}</b>
-        <span>跳过保护</span><b>${fmt(extract.skipped_protected || 0)}</b>
-        <span>失败分块</span><b>${fmt(extract.failed_chunks || 0)}</b>
-      </div>` : ''}
+        : emptyBlock('还没有批次记录。')}
     </div>`
   }
 
@@ -1003,7 +1027,7 @@ export function openLoop(options = {}) {
         <div class="loop-toolbar loop-toolbar-wrap">
           <select data-filter="memory.type">${opt('', '全部类型', f.type)}${Object.entries(TYPE_LABEL).map(([k, v]) => opt(k, v, f.type)).join('')}</select>
           <select data-filter="memory.status">${opt('', '全部状态', f.status)}${Object.entries(STATUS_LABEL).map(([k, v]) => opt(k, v, f.status)).join('')}</select>
-          <select data-filter="memory.scope_type">${opt('', '全部范围', f.scope_type)}${['global', 'project', 'task', 'object', 'user'].map((k) => opt(k, k, f.scope_type)).join('')}</select>
+          <select data-filter="memory.scope_type">${opt('', '全部范围', f.scope_type)}${Object.entries(SCOPE_LABEL).map(([k, v]) => opt(k, v, f.scope_type)).join('')}</select>
           <input data-filter="memory.source_id" value="${esc(f.source_id)}" placeholder="来源 ID">
           <input id="loop-mem-q" data-filter="memory.q" value="${esc(f.q)}" placeholder="搜索记忆文本">
           <button class="loop-btn" type="button" data-loop-action="memories">查询</button>
@@ -1035,7 +1059,7 @@ export function openLoop(options = {}) {
         ${m.protected ? badge('人工保护', 'protected') : ''}
         ${sensitive ? badge('敏感 · 已隐藏', 'sensitive') : ''}
         ${m.version != null ? badge(`v${m.version}`, 'version') : ''}
-        <span class="loop-meta">${esc(m.scope_type || '—')}/${esc(m.scope_id || 'all')} · 置信 ${Math.round(Number(m.certainty || 0) * 100)}%</span>
+        <span class="loop-meta">${esc(SCOPE_LABEL[m.scope_type] || m.scope_type || '—')}/${esc(m.scope_id || 'all')} · 置信 ${Math.round(Number(m.certainty || 0) * 100)}%</span>
       </div>
       <div class="loop-memory-text">${sensitive ? '敏感 · 已隐藏' : esc(m.text || '')}</div>
       <div class="loop-meta">${m.ontology ? `本体：${esc(m.ontology.type_id || m.ontology.type || '')} / ${esc(m.ontology.name || '')}` : '未映射本体'} · ${esc(m.source_category || '—')} / ${esc(m.confirmation || '—')}</div>
@@ -1161,7 +1185,7 @@ export function openLoop(options = {}) {
       ${items.length ? `<div class="loop-list">${items.map((v) => `<div class="loop-row"><div>
         <b>v${esc(String(v.version))}</b> ${badge(v.action, v.action)} ${v.current ? badge('当前', 'active') : ''}
         <div class="loop-meta">${esc(fmtTime(v.created_at))} · ${esc(v.actor || 'local-user')}${v.note ? ` · ${esc(v.note)}` : ''}</div>
-        <div class="loop-meta">新增 类型 ${v.summary.added.types} / 属性 ${v.summary.added.props} / 关系 ${v.summary.added.relations} · 删除 类型 ${v.summary.removed.types} / 属性 ${v.summary.removed.props} / 关系 ${v.summary.removed.relations}</div>
+        <div class="loop-meta">新增 类型 ${fmt(v.summary?.added?.types)} / 属性 ${fmt(v.summary?.added?.props)} / 关系 ${fmt(v.summary?.added?.relations)} · 删除 类型 ${fmt(v.summary?.removed?.types)} / 属性 ${fmt(v.summary?.removed?.props)} / 关系 ${fmt(v.summary?.removed?.relations)}</div>
       </div><div class="loop-actions loop-actions-col">
         <button class="loop-btn loop-btn-sm" type="button" data-loop-action="ontology-version-diff" data-id="${esc(v.id)}">差异</button>
         ${v.current ? '' : `<button class="loop-btn loop-btn-sm" type="button" data-loop-action="ontology-version-rollback" data-id="${esc(v.id)}">回滚</button>`}
@@ -1362,12 +1386,12 @@ export function openLoop(options = {}) {
   const REVIEW_FALLBACK = [{ id: 'auto', name: '全自动' }, { id: 'semi', name: '半自动' }, { id: 'manual', name: '手动' }]
   function reviewModeButtons() {
     const modes = state.reviewModes && state.reviewModes.length ? state.reviewModes : REVIEW_FALLBACK
-    return modes.map((m) => `<button class="loop-btn loop-btn-sm ${state.reviewMode === m.id ? 'is-on' : ''}" type="button" data-loop-action="review-mode" data-id="${m.id}" title="${esc(m.description || '')}">${esc(m.name)}</button>`).join('')
+    return modes.map((m) => `<button class="loop-btn loop-btn-sm ${state.reviewMode === m.id ? 'is-on' : ''}" type="button" data-loop-action="review-mode" data-id="${esc(m.id)}" title="${esc(m.description || '')}">${esc(m.name)}</button>`).join('')
   }
   function reviewModeHint() {
     const cur = (state.reviewModes || []).find((m) => m.id === state.reviewMode)
     if (!cur) return '规则默认候选；确认后才会进入上下文。编辑会写入版本并标记 human_edited。'
-    return `当前「${cur.name}」：${cur.description}切换后对之后 AI 提炼的规则生效，已存在的候选不受影响。`
+    return `当前「${esc(cur.name)}」：${esc(cur.description || '')}切换后对之后 AI 提炼的规则生效，已存在的候选不受影响。`
   }
 
   function rulesView() {
@@ -1499,10 +1523,14 @@ export function openLoop(options = {}) {
     }
     const items = v.items || []
     return `<div class="loop-panel">${head}
-      ${items.length ? `<div class="loop-list">${items.map((it) => `<div class="loop-row"><div>
-        <b>v${esc(String(it.version))}</b> <span class="loop-meta">${esc(STATUS_LABEL[it.status] || it.status || '')} · ${esc(fmtTime(it.created_at))}</span>
-        <div class="loop-meta">${esc(it.name || '')}${it.note ? ` · ${esc(it.note)}` : ''}</div>
-      </div></div>`).join('')}</div>` : emptyBlock('没有版本记录。')}
+      ${items.length ? `<div class="loop-list">${items.map((it) => {
+        const p = it.payload && typeof it.payload === 'object' ? it.payload : {}
+        const status = p.governance_status || it.status || ''
+        return `<div class="loop-row"><div>
+        <b>v${esc(String(it.version ?? p.version ?? '—'))}</b> <span class="loop-meta">${esc(GOVERNANCE[status] || STATUS_LABEL[status] || status)} · ${esc(fmtTime(it.created_at))}</span>
+        <div class="loop-meta">${esc(p.name || it.name || '')}${it.note ? ` · ${esc(it.note)}` : ''}</div>
+      </div></div>`
+      }).join('')}</div>` : emptyBlock('没有版本记录。')}
       <div class="loop-actions"><button class="loop-btn loop-btn-sm" type="button" data-loop-action="rule-versions-close">收起</button></div>
     </div>`
   }
@@ -1521,7 +1549,7 @@ export function openLoop(options = {}) {
         <label>范围 ID<input data-rule-field="scope_id" value="${val('scope_id', r.scope_id)}"></label>
         <label>有效期起<input data-rule-field="valid_from" value="${val('valid_from', r.valid_from)}" placeholder="YYYY-MM-DD"></label>
         <label>有效期止<input data-rule-field="valid_to" value="${val('valid_to', r.valid_to)}" placeholder="YYYY-MM-DD"></label>
-        <label>结构状态<select data-rule-field="structure_status">${opt('structured', '已结构化', draft.structure_status || r.structure_status)}${opt('unstructured', '待整理', draft.structure_status || r.structure_status)}</select></label>
+        <label>结构状态<input value="${esc(STRUCTURE_LABEL[r.structure_status] || r.structure_status || '—')}" readonly aria-readonly="true" title="保存时由服务端按条件重新计算"></label>
         <label>说明<input data-rule-field="description" value="${val('description', r.description)}"></label>
       </div>
       <label class="loop-field">条件 JSON（保存前 JSON.parse 校验）<textarea class="loop-textarea loop-textarea-sm" data-rule-json="conditions">${jsonVal('conditions', r.conditions)}</textarea></label>
@@ -1631,7 +1659,7 @@ export function openLoop(options = {}) {
 
   async function refreshVectorStatus(probe = false) {
     try {
-      const out = await api.loopEmbeddingStatus(probe ? '?probe=1' : '')
+      const out = await api.loopEmbeddingStatus(ownerQs(probe ? { probe: 1 } : {}))
       state.vectorStatus = out
       state.vectorError = null
     } catch (e) { state.vectorError = e }
@@ -1670,7 +1698,7 @@ export function openLoop(options = {}) {
       <div class="loop-card">
         <div class="loop-card-title">组装当前上下文</div>
         <div class="loop-grid">
-          <label>用户<input data-f="context.owner" value="${esc(f.owner)}"></label>
+          <label>用户<input data-owner value="${esc(state.owner)}" placeholder="local-user"></label>
           <label>项目<input data-f="context.project" value="${esc(f.project)}" placeholder="可留空"></label>
           <label>任务<input data-f="context.task" value="${esc(f.task)}" placeholder="可留空"></label>
           <label>当前指令<input data-f="context.instruction" value="${esc(f.instruction)}" placeholder="可留空"></label>
@@ -1795,7 +1823,7 @@ export function openLoop(options = {}) {
 
   function feedbackForm() {
     const f = state.forms.feedback
-    const rules = state.rules || []
+    const rules = state.feedbackRules || []
     return `
       <div class="loop-grid">
         <label>outcome<select data-f="feedback.outcome">${Object.entries(OUTCOME).map(([k, v]) => opt(k, v, f.outcome)).join('')}</select></label>
@@ -1870,7 +1898,7 @@ export function openLoop(options = {}) {
       <div class="loop-card">
         <div class="loop-card-title">记忆图谱</div>
         <div class="loop-toolbar loop-toolbar-wrap">
-          <input data-filter="graph.owner" value="${esc(state.filters.graph.owner)}" placeholder="owner">
+          <input data-owner value="${esc(state.owner)}" placeholder="owner" aria-label="归属用户">
           <input data-filter="graph.project" value="${esc(state.filters.graph.project)}" placeholder="项目（可留空）">
           <button class="loop-btn loop-btn-sm" type="button" data-loop-action="graph-refresh">刷新</button>
           <button class="loop-btn loop-btn-sm ${state.graphProjection === 'loop' ? 'is-on' : ''}" type="button" data-loop-action="graph-projection"${canProject ? '' : ' disabled aria-disabled="true"'}>投射到中央大脑：${state.graphProjection === 'loop' ? '开' : '关'}</button>
@@ -2134,7 +2162,7 @@ export function openLoop(options = {}) {
     state.sourceDetail = { id, loading: true }
     render()
     try {
-      const out = await api.loopImportDetail(id)
+      const out = await api.loopImportDetail(id, ownerQs())
       state.sourceDetail = { id, data: adaptImportDetail(out, id) }
     } catch (e) {
       state.sourceDetail = { id, error: e }
@@ -2146,7 +2174,7 @@ export function openLoop(options = {}) {
     state.memDetail = { id, loading: true }
     render()
     try {
-      const out = await api.loopMemory(id)
+      const out = await api.loopMemory(id, ownerQs())
       state.memDetail = { id, data: adaptMemoryDetail(out, id) }
     } catch (e) {
       state.memDetail = { id, error: e }
@@ -2156,33 +2184,54 @@ export function openLoop(options = {}) {
 
   async function reloadInstance(id) {
     try {
-      const out = await api.loopOntologyInstance(id)
+      const out = await api.loopOntologyInstance(id, ownerQs())
       state.instDetails[id] = { data: adaptOntologyInstance(out, id) }
     } catch (e) {
       state.instDetails[id] = { error: e }
     }
   }
   async function refreshOntology() {
-    state.ontology = await api.loopOntology()
+    state.ontology = await api.loopOntology(ownerQs())
   }
 
   /* ---------------------------------------------------------------- 筛选刷新 */
 
   async function refreshMemoriesView() {
-    try { await fetchMemories(); state.viewError.memory = null; render() }
+    try { if (await fetchMemories()) { state.viewError.memory = null; render() } }
     catch (e) { state.viewError.memory = e; render() }
   }
   async function refreshRulesView() {
-    try { await fetchRules(); state.viewError.rules = null; render() }
+    try { if (await fetchRules()) { state.viewError.rules = null; render() } }
     catch (e) { state.viewError.rules = e; render() }
   }
   async function refreshSkillsView() {
-    try { await fetchSkills(); state.viewError.skills = null; render() }
+    try { if (await fetchSkills()) { state.viewError.skills = null; render() } }
     catch (e) { state.viewError.skills = e; render() }
   }
+  const projectionOptions = () => ({ owner: ownerValue(), project: state.filters.graph.project, limit: 150 })
+  async function refreshProjection() {
+    if (state.graphProjection !== 'loop' || typeof window.__MB_SET_GRAPH__ !== 'function') return
+    try { await window.__MB_SET_GRAPH__('loop', projectionOptions()) }
+    catch (e) { toast(`中央投射刷新失败：${errorInfo(e).message}`, 3600) }
+  }
   async function refreshGraphView() {
-    await fetchGraph()
+    if (!(await fetchGraph())) return
     render()
+    await refreshProjection()
+  }
+  async function applyOwnerChange() {
+    if (ownerValue() === ownerApplied) return
+    ownerApplied = ownerValue()
+    state.memSelected.clear()
+    state.memDetail = null
+    state.sourceDetail = null
+    state.archiveConfirm = ''
+    state.instDetails = {}
+    state.memVersions = {}
+    state.ruleVersions = {}
+    persistForms()
+    await loadView(view, { showLoading: false })
+    await refreshProjection()
   }
 
   /* ---------------------------------------------------------------- 动作 */
@@ -2236,7 +2285,7 @@ export function openLoop(options = {}) {
       const payload = {
         text,
         format: f.format || 'auto',
-        owner: f.owner || 'local-user',
+        owner: ownerValue(),
         autoExtract: f.autoExtract === '1',
       }
       if (String(f.project || '').trim()) payload.project = String(f.project).trim()
@@ -2272,16 +2321,16 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'jobs-refresh') { await refreshJobs(); render(); return }
-    if (act === 'job-poll') { await refreshJobs(); state.jobDetail = (await api.loopJob(id)).job; startJobPoll(id); render(); return }
+    if (act === 'job-poll') { await refreshJobs(); state.jobDetail = (await api.loopJob(id, ownerQs())).job; startJobPoll(id); render(); return }
     if (act === 'job-retry') {
-      const out = await api.loopRetryJob(id)
+      const out = await api.loopRetryJob(id, withOwner())
       state.jobDetail = out.job
       await refreshJobs(); startJobPoll(id); render()
       toast('任务已重新入队')
       return
     }
     if (act === 'job-cancel') {
-      const out = await api.loopCancelJob(id)
+      const out = await api.loopCancelJob(id, withOwner())
       state.jobDetail = out.job
       await refreshJobs(); render()
       toast(out.job.status === 'cancelled' ? '任务已取消' : '已请求取消，当前分块结束后停止')
@@ -2305,24 +2354,19 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'extract') {
-      const sourceId = id
-      state.extractStarting[sourceId] = true
-      state.extractErrors[sourceId] = null
       try {
-        const out = await api.loopExtract(sourceId)
-        state.extractResults[sourceId] = out
+        const out = await api.loopExtract(id, withOwner())
         state.jobDetail = out.job
+        state.jobError = null
         await refreshJobs()
         startJobPoll(out.job_id)
         toast(`拆解任务已入队：${out.job_id}`, 3600)
       } catch (e) {
-        state.extractErrors[sourceId] = e
+        state.jobError = e
         toast(errorInfo(e).message, 3600)
-      } finally {
-        state.extractStarting[sourceId] = false
-        updateSourceList()
-        render()
       }
+      render()
+      bodyEl.querySelector('#loop-job-panel')?.scrollIntoView?.({ block: 'nearest' })
       return
     }
     if (act === 'retry-batch') {
@@ -2344,7 +2388,7 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'archive-source-confirm') {
-      const out = await api.loopArchiveImport(id)
+      const out = await api.loopArchiveImport(id, ownerQs())
       state.archiveResult = { sourceId: id, archived: out.archived || {}, note: out.note || '' }
       state.archiveConfirm = ''
       toast(`已归档：受影响记忆 ${fmt(out.archived?.memories ?? 0)} 条 · 规则 ${fmt(out.archived?.rules ?? 0)} 条`, 4000)
@@ -2376,7 +2420,7 @@ export function openLoop(options = {}) {
       const list = fromInput.length ? fromInput : [...state.memSelected]
       if (list.length < 2) { setOpError('mem-merge', validationError('至少需要 2 条记忆才能合并')); return }
       const target = list[0]
-      const out = await api.loopMergeMemory(target, { ids: list, text: text || undefined })
+      const out = await api.loopMergeMemory(target, withOwner({ ids: list, text: text || undefined }))
       toast(`已合并 ${fmt((out.merged_ids || list).length)} 条记忆，目标 ${out.memory?.id || target}`)
       state.mergePanel = false
       state.mergeIds = ''
@@ -2398,10 +2442,10 @@ export function openLoop(options = {}) {
       const objRaw = panel?.querySelector('[data-mem-object]')?.value || ''
       const payload = {}
       if (text.trim()) payload.text = text
-      if (objRaw.trim()) payload.object_value = parseMaybeJson(objRaw)
+      if (objRaw.trim()) payload.object_value = objRaw
       if (!Object.keys(payload).length) { setOpError(`mem-edit:${id}`, validationError('没有需要保存的字段')); return }
       try {
-        const out = await api.loopPatchMemory(id, payload)
+        const out = await api.loopPatchMemory(id, withOwner(payload))
         toast(`已保存，版本 v${out.memory?.version ?? '?'}`)
         state.memEdit = null
         await fetchMemories()
@@ -2418,7 +2462,7 @@ export function openLoop(options = {}) {
       state.memVersions[id] = { loading: true }
       render()
       try {
-        const out = await api.loopMemoryVersions(id)
+        const out = await api.loopMemoryVersions(id, ownerQs())
         state.memVersions[id] = { items: out.items || [] }
       } catch (e) {
         state.memVersions[id] = { error: e }
@@ -2442,7 +2486,7 @@ export function openLoop(options = {}) {
       const box = bodyEl.querySelector(`#correct-${window.CSS?.escape ? CSS.escape(id) : cssSafe(id)}`)
       const text = (box?.querySelector('textarea')?.value || '').trim()
       if (!text) return toast('纠正内容不能为空')
-      await api.loopCorrect(id, { action: 'supersede', text })
+      await api.loopCorrect(id, withOwner({ action: 'supersede', text }))
       toast('已建立替代关系，旧记忆保留但退出当前视图')
       await fetchMemories()
       await refreshOverview()
@@ -2450,7 +2494,7 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'confirm-memory') {
-      await api.loopCorrect(id, { action: 'confirm' })
+      await api.loopCorrect(id, withOwner({ action: 'confirm' }))
       toast('记忆已确认')
       await fetchMemories()
       await refreshOverview()
@@ -2458,7 +2502,7 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'archive-memory') {
-      await api.loopCorrect(id, { action: 'archive' })
+      await api.loopCorrect(id, withOwner({ action: 'archive' }))
       toast('记忆已废弃')
       await fetchMemories()
       await refreshOverview()
@@ -2469,7 +2513,7 @@ export function openLoop(options = {}) {
     /* ---------- 本体 ---------- */
     if (act === 'ontology-versions-refresh') {
       await refreshOntologyVersions()
-      state.ontology = await api.loopOntology()
+      state.ontology = await api.loopOntology(ownerQs())
       render()
       return
     }
@@ -2482,10 +2526,10 @@ export function openLoop(options = {}) {
     if (act === 'ontology-version-rollback') {
       const note = document.querySelector('#ont-rollback-note')?.value || ''
       try {
-        const out = await api.loopRollbackOntology(id, { note })
+        const out = await api.loopRollbackOntology(id, withOwner({ note }))
         toast(`已回滚到 v${out.target_version}，生成新版本 v${out.version}`)
         state.ontologyRollback = null
-        state.ontology = await api.loopOntology()
+        state.ontology = await api.loopOntology(ownerQs())
         await refreshOntologyVersions()
         render()
       } catch (e) {
@@ -2503,10 +2547,10 @@ export function openLoop(options = {}) {
     if (act === 'ontology-version-rollback-confirm') {
       const note = document.querySelector('#ont-rollback-note')?.value || state.ontologyRollback?.note || ''
       try {
-        const out = await api.loopRollbackOntology(id, { note, confirm_impact: true })
+        const out = await api.loopRollbackOntology(id, withOwner({ note, confirm_impact: true }))
         toast(`已回滚到 v${out.target_version}，生成新版本 v${out.version}`)
         state.ontologyRollback = null
-        state.ontology = await api.loopOntology()
+        state.ontology = await api.loopOntology(ownerQs())
         await refreshOntologyVersions()
         render()
       } catch (e) { setOpError('ontology-rollback', e) }
@@ -2537,7 +2581,7 @@ export function openLoop(options = {}) {
       payload.value = parseMaybeJson(value)
       if (unit) payload.unit = unit
       try {
-        const out = await api.loopSetInstanceProp(id, payload)
+        const out = await api.loopSetInstanceProp(id, payload, ownerQs())
         toast(out.converted != null ? `属性已设置；单位已转换：${stringify(out.converted)}` : '属性已设置')
         await reloadInstance(id)
         await refreshOntology()
@@ -2561,7 +2605,7 @@ export function openLoop(options = {}) {
       if (target) payload.to_instance_id = target
       else payload.to_name = toName
       try {
-        await api.loopSetInstanceRelation(id, payload)
+        await api.loopSetInstanceRelation(id, payload, ownerQs())
         toast('关系已设置')
         await reloadInstance(id)
         await refreshOntology()
@@ -2577,7 +2621,7 @@ export function openLoop(options = {}) {
       const reason = (panel?.querySelector('[data-state-reason]')?.value || '').trim()
       if (!nextState) return setOpError(`state:${id}`, validationError('请选择目标状态'))
       try {
-        await api.loopSetInstanceState(id, { state: nextState, reason: reason || undefined })
+        await api.loopSetInstanceState(id, { state: nextState, reason: reason || undefined }, ownerQs())
         toast(`状态已转换为 ${nextState}`)
         await reloadInstance(id)
         await refreshOntology()
@@ -2589,7 +2633,7 @@ export function openLoop(options = {}) {
     }
     if (act === 'proposal-approve') {
       try {
-        const out = await api.loopApproveProposal(id)
+        const out = await api.loopApproveProposal(id, withOwner())
         state.proposalResults[id] = out.applied || { kind: 'unknown' }
         if (out.applied && out.applied.error) toast(`发布失败：${out.applied.error}`, 4000)
         else toast(`已发布：${out.applied?.kind || '结构候选'} ${out.applied?.id || ''}`)
@@ -2605,7 +2649,7 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'proposal-reject') {
-      await api.loopRejectProposal(id)
+      await api.loopRejectProposal(id, withOwner())
       state.proposalResults[id] = { kind: 'rejected' }
       toast('结构候选已拒绝')
       await refreshOntology()
@@ -2630,7 +2674,7 @@ export function openLoop(options = {}) {
       const noteEl = document.querySelector(`[data-conflict-note="${CSS.escape(key)}"]`)
       const note = noteEl ? noteEl.value : ''
       try {
-        const out = await api.loopResolveConflict(key, { resolution, note, owner: state.forms.context.owner || 'local-user' })
+        const out = await api.loopResolveConflict(key, withOwner({ resolution, note }))
         toast(`裁决已保存：${RESOLUTION[resolution] || resolution}；保留双方规则与版本`)
         await fetchRuleConflicts()
         await fetchRules()
@@ -2645,26 +2689,26 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'approve-rule') {
-      await api.loopApproveRule(id)
+      await api.loopApproveRule(id, withOwner())
       toast('规则已生效')
       await refreshRulesView()
       await refreshOverview()
       return
     }
     if (act === 'pause-rule') {
-      await api.loopPauseRule(id)
+      await api.loopPauseRule(id, withOwner())
       toast('规则已暂停')
       await refreshRulesView()
       return
     }
     if (act === 'resume-rule') {
-      await api.loopResumeRule(id)
+      await api.loopResumeRule(id, withOwner())
       toast('规则已恢复')
       await refreshRulesView()
       return
     }
     if (act === 'archive-rule') {
-      await api.loopArchiveRule(id)
+      await api.loopArchiveRule(id, withOwner())
       toast('规则已归档')
       await refreshRulesView()
       return
@@ -2680,7 +2724,7 @@ export function openLoop(options = {}) {
       let ctx
       try { ctx = JSON.parse(raw || '{}') } catch { state.ruleSim[id] = { contextText: raw, error: validationError('测试上下文必须是合法 JSON') }; render(); return }
       try {
-        const out = await api.loopSimulateRule(id, ctx)
+        const out = await api.loopSimulateRule(id, ctx, withOwner())
         state.ruleSim[id] = { contextText: raw, out }
       } catch (e) {
         state.ruleSim[id] = { contextText: raw, error: e }
@@ -2694,7 +2738,7 @@ export function openLoop(options = {}) {
       state.ruleVersions[id] = { loading: true }
       render()
       try {
-        const out = await api.loopRuleVersions(id)
+        const out = await api.loopRuleVersions(id, ownerQs())
         state.ruleVersions[id] = { items: out.items || [] }
       } catch (e) {
         state.ruleVersions[id] = { error: e }
@@ -2731,10 +2775,9 @@ export function openLoop(options = {}) {
         scope_type: field('scope_type') || undefined, scope_id: field('scope_id') || undefined,
         strength: field('strength'), conditions, actions, exceptions,
         valid_from: field('valid_from') || undefined, valid_to: field('valid_to') || undefined,
-        structure_status: field('structure_status') || undefined,
       }
       try {
-        const out = await api.loopPatchRule(id, payload)
+        const out = await api.loopPatchRule(id, withOwner(payload))
         toast(`规则已保存，版本 v${out.rule?.version ?? out.version ?? '?'}`)
         state.ruleEdit = null
         await fetchRules()
@@ -2771,7 +2814,7 @@ export function openLoop(options = {}) {
         strength: field('strength'), conditions, actions, activate,
       }
       try {
-        const out = await api.loopSupersedeRule(id, payload)
+        const out = await api.loopSupersedeRule(id, withOwner(payload))
         toast(`已创建替代规则 ${out.rule?.id || out.id || ''}${activate ? '（已生效）' : '（候选）'}`, 3600)
         state.ruleSupersede = null
         await fetchRules()
@@ -2788,12 +2831,13 @@ export function openLoop(options = {}) {
     if (act === 'skills-derive') {
       const project = (state.forms.skills.project || '').trim()
       const min = Number(state.forms.skills.min_memories)
-      const out = await api.loopDeriveSkills({
+      const out = await api.loopDeriveSkills(withOwner({
         project: project || undefined,
         min_memories: Number.isFinite(min) && min > 0 ? min : undefined,
-      })
+      }))
       state.skillDerive = out
-      state.skills = Array.isArray(out.items) ? out.items : (await api.loopSkills(qs({ status: state.filters.skills.status }))).items || []
+      if (Array.isArray(out.items)) state.skills = out.items
+      else await fetchSkills()
       const derivedCount = Array.isArray(out.items) ? out.items.length : (Number(out.derived) || 0)
       toast(`已生成 ${fmt(derivedCount)} 个 Skill 候选`)
       await refreshOverview()
@@ -2826,7 +2870,7 @@ export function openLoop(options = {}) {
         acceptance: field('acceptance'), ...parsed,
       }
       try {
-        await api.loopPatchSkill(id, payload)
+        await api.loopPatchSkill(id, withOwner(payload))
         toast('Skill 候选已保存')
         state.skillEdit = null
         await fetchSkills()
@@ -2837,14 +2881,14 @@ export function openLoop(options = {}) {
       return
     }
     if (act === 'skill-export') {
-      const out = await api.loopExportSkill(id)
+      const out = await api.loopExportSkill(id, withOwner())
       const filename = out.filename || `skill-${id}.md`
       if (downloadText(out.markdown || '', filename)) toast(`已导出 ${filename}`)
       else toast('下载失败，浏览器可能阻止了文件保存')
       return
     }
     if (act === 'skill-reject') {
-      await api.loopRejectSkill(id)
+      await api.loopRejectSkill(id, withOwner())
       toast('已忽略该 Skill 候选')
       await fetchSkills()
       await refreshOverview()
@@ -2859,7 +2903,7 @@ export function openLoop(options = {}) {
       const f = state.forms.context
       const budget = Number(f.budget)
       const payload = {
-        owner: f.owner || undefined,
+        owner: ownerValue(),
         project: f.project || undefined,
         task: f.task || undefined,
         instruction: f.instruction || undefined,
@@ -2886,7 +2930,7 @@ export function openLoop(options = {}) {
     if (act === 'vector-refresh') { await refreshVectorStatus(); render(); return }
     if (act === 'vector-reindex') {
       try {
-        const out = await api.loopReindexEmbeddings({ owner: state.forms.context.owner || 'local-user' })
+        const out = await api.loopReindexEmbeddings(withOwner())
         state.vectorJob = out.job
         await refreshVectorStatus()
         toast(`向量重建任务已入队：${out.job?.id || '—'}（${fmt(out.queued || 0)} 条）`, 4000)
@@ -2901,7 +2945,7 @@ export function openLoop(options = {}) {
       const f = state.forms.context
       const af = state.forms.action || {}
       const payload = {
-        owner: f.owner || undefined, project: f.project || undefined, task: f.task || undefined,
+        owner: ownerValue(), project: f.project || undefined, task: f.task || undefined,
         instruction: f.instruction || undefined, query: f.query || undefined,
         include_sensitive: !!f.includeSensitive,
         authorized: !!af.authorized, authorization_note: String(af.note || '').trim() || undefined,
@@ -2929,7 +2973,7 @@ export function openLoop(options = {}) {
     }
     if (act === 'feedback-submit') {
       const f = state.forms.feedback
-      const payload = { outcome: f.outcome || 'useful' }
+      const payload = withOwner({ outcome: f.outcome || 'useful' })
       if (String(f.run_id || '').trim()) payload.run_id = String(f.run_id).trim()
       if (f.category) payload.category = f.category
       if (String(f.feedback || '').trim()) payload.feedback = String(f.feedback).trim()
@@ -2949,7 +2993,7 @@ export function openLoop(options = {}) {
     }
     if (act === 'feedback-quick') {
       const outcome = el.dataset.outcome || 'useful'
-      await api.loopFeedback({ run_id: id, outcome })
+      await api.loopFeedback(withOwner({ run_id: id, outcome }))
       toast('反馈已记录')
       await refreshRunsAndFeedback()
       render()
@@ -2962,7 +3006,7 @@ export function openLoop(options = {}) {
       if (typeof window.__MB_SET_GRAPH__ !== 'function') return toast('当前页面未提供投射接口')
       const target = state.graphProjection === 'loop' ? 'base' : 'loop'
       try {
-        await window.__MB_SET_GRAPH__(target, {owner:state.filters.graph.owner,project:state.filters.graph.project,limit:150})
+        await window.__MB_SET_GRAPH__(target, projectionOptions())
         state.graphProjection = target
         toast(target === 'loop' ? '已投射闭环图谱到中央大脑' : '已恢复原始大脑图谱')
         render()
@@ -3053,6 +3097,11 @@ export function openLoop(options = {}) {
       if (countEl) countEl.textContent = String(state.memSelected.size)
       return
     }
+    if (t.matches('[data-owner]')) {
+      state.owner = t.value
+      applyOwnerChange()
+      return
+    }
     const conflictNote = t.closest('[data-conflict-note]')
     if (conflictNote) { state.conflictNotes[conflictNote.dataset.conflictNote] = conflictNote.value; return }
     const filterEl = t.closest('[data-filter]')
@@ -3078,6 +3127,11 @@ export function openLoop(options = {}) {
 
   listen('input', (e) => {
     const t = e.target
+    if (t.matches('[data-owner]')) {
+      state.owner = t.value
+      schedulePersistForms()
+      return
+    }
     const fieldEl = t.closest('[data-f]')
     if (fieldEl && fieldEl.type !== 'checkbox') {
       const value = fieldEl.value

@@ -78,7 +78,7 @@ function normalize(d) {
     vectorIndex: ov.vectorIndex ?? ov.vectors ?? 0,
     loaded: ov.loaded ?? (out.memories || []).length,
     total: ov.total ?? ov.activeMemories ?? (out.memories || []).length,
-    timeRange: ov.timeRange || '最近30天',
+    timeRange: ov.timeRange || '全部时间',
     memoryType: ov.memoryType || '全部类型',
     updatedAt: ov.updatedAt || '',
     ...ov,
@@ -221,55 +221,55 @@ const qs = (params = {}) => {
 }
 
 /* 概览 / 批次 */
-export const loopOverview = () => loop('/overview')
+export const loopOverview = (query = '') => loop(`/overview${query}`)
 export const loopBatches = (query = '') => loop(`/batches${query}`)
 export const loopBatch = (id) => loop(`/batches/${encodeURIComponent(id)}`)
-export const loopRetryBatch = (id) => loopPost(`/batches/${encodeURIComponent(id)}/retry`)
+export const loopRetryBatch = (id, body = {}) => loopPost(`/batches/${encodeURIComponent(id)}/retry`, body)
 
 /* 导入 */
 export const loopPreview = (body) => loopPost('/preview', body)
 export const loopImport = (body) => loopPost('/import', body)
 export const loopImports = (query = '') => loop(`/imports${query}`)
-export const loopImportDetail = (id) => loop(`/imports/${encodeURIComponent(id)}`)
-export const loopArchiveImport = (id) => loopPost(`/imports/${encodeURIComponent(id)}/archive`)
+export const loopImportDetail = (id, query = '') => loop(`/imports/${encodeURIComponent(id)}${query}`)
+export const loopArchiveImport = (id, query = '') => loopPost(`/imports/${encodeURIComponent(id)}/archive${query}`)
 export const loopExtract = (id, body = {}) => loopPost(`/import/${encodeURIComponent(id)}/extract`, body)
 
 /* 原子记忆 */
 export const loopMemories = (query = '') => loop(`/memories${query}`)
-export const loopMemory = (id) => loop(`/memories/${encodeURIComponent(id)}`)
+export const loopMemory = (id, query = '') => loop(`/memories/${encodeURIComponent(id)}${query}`)
 export const loopCorrect = (id, body) => loopPost(`/memories/${encodeURIComponent(id)}/correct`, body)
 export const loopPatchMemory = (id, body) => loopPatch(`/memories/${encodeURIComponent(id)}`, body)
-export const loopMemoryVersions = (id) => loop(`/memories/${encodeURIComponent(id)}/versions`)
+export const loopMemoryVersions = (id, query = '') => loop(`/memories/${encodeURIComponent(id)}/versions${query}`)
 export const loopMergeMemory = (id, body) => loopPost(`/memories/${encodeURIComponent(id)}/merge`, body)
 
 /* 动态本体 */
-export const loopOntology = () => loop('/ontology')
-export const loopOntologyInstance = (id) => loop(`/ontology/instances/${encodeURIComponent(id)}`)
-export const loopSetInstanceProp = (id, body) => loopPost(`/ontology/instances/${encodeURIComponent(id)}/props`, body)
-export const loopSetInstanceRelation = (id, body) => loopPost(`/ontology/instances/${encodeURIComponent(id)}/relations`, body)
-export const loopSetInstanceState = (id, body) => loopPost(`/ontology/instances/${encodeURIComponent(id)}/state`, body)
-export const loopApproveProposal = (id) => loopPost(`/ontology/proposals/${encodeURIComponent(id)}/approve`)
-export const loopRejectProposal = (id) => loopPost(`/ontology/proposals/${encodeURIComponent(id)}/reject`)
+export const loopOntology = (query = '') => loop(`/ontology${query}`)
+export const loopOntologyInstance = (id, query = '') => loop(`/ontology/instances/${encodeURIComponent(id)}${query}`)
+export const loopSetInstanceProp = (id, body, query = '') => loopPost(`/ontology/instances/${encodeURIComponent(id)}/props${query}`, body)
+export const loopSetInstanceRelation = (id, body, query = '') => loopPost(`/ontology/instances/${encodeURIComponent(id)}/relations${query}`, body)
+export const loopSetInstanceState = (id, body, query = '') => loopPost(`/ontology/instances/${encodeURIComponent(id)}/state${query}`, body)
+export const loopApproveProposal = (id, body = {}) => loopPost(`/ontology/proposals/${encodeURIComponent(id)}/approve`, body)
+export const loopRejectProposal = (id, body = {}) => loopPost(`/ontology/proposals/${encodeURIComponent(id)}/reject`, body)
 
 /* 规则 */
 export const loopRules = (query = '') => loop(`/rules${query}`)
-export const loopRule = (id) => loop(`/rules/${encodeURIComponent(id)}`)
-export const loopRuleVersions = (id) => loop(`/rules/${encodeURIComponent(id)}/versions`)
-export const loopRuleConflicts = () => loop('/rules/conflicts')
-export const loopApproveRule = (id) => loopPost(`/rules/${encodeURIComponent(id)}/approve`)
-export const loopPauseRule = (id) => loopPost(`/rules/${encodeURIComponent(id)}/pause`)
-export const loopResumeRule = (id) => loopPost(`/rules/${encodeURIComponent(id)}/resume`)
-export const loopArchiveRule = (id) => loopPost(`/rules/${encodeURIComponent(id)}/archive`)
+export const loopRule = (id, query = '') => loop(`/rules/${encodeURIComponent(id)}${query}`)
+export const loopRuleVersions = (id, query = '') => loop(`/rules/${encodeURIComponent(id)}/versions${query}`)
+export const loopRuleConflicts = (query = '') => loop(`/rules/conflicts${query}`)
+export const loopApproveRule = (id, body = {}) => loopPost(`/rules/${encodeURIComponent(id)}/approve`, body)
+export const loopPauseRule = (id, body = {}) => loopPost(`/rules/${encodeURIComponent(id)}/pause`, body)
+export const loopResumeRule = (id, body = {}) => loopPost(`/rules/${encodeURIComponent(id)}/resume`, body)
+export const loopArchiveRule = (id, body = {}) => loopPost(`/rules/${encodeURIComponent(id)}/archive`, body)
 export const loopPatchRule = (id, body) => loopPatch(`/rules/${encodeURIComponent(id)}`, body)
 export const loopSupersedeRule = (id, body) => loopPost(`/rules/${encodeURIComponent(id)}/supersede`, body)
-export const loopSimulateRule = (id, context) => loopPost(`/rules/${encodeURIComponent(id)}/simulate`, { context })
+export const loopSimulateRule = (id, context, extra = {}) => loopPost(`/rules/${encodeURIComponent(id)}/simulate`, { ...extra, context })
 
 /* 上下文 / 反馈 / 运行 */
 export const loopContext = (body) => loopPost('/context', body)
 export const loopJobs = (query = '') => loop(`/jobs${query}`)
-export const loopJob = (id) => loop(`/jobs/${encodeURIComponent(id)}`)
-export const loopRetryJob = (id) => loopPost(`/jobs/${encodeURIComponent(id)}/retry`)
-export const loopCancelJob = (id) => loopPost(`/jobs/${encodeURIComponent(id)}/cancel`)
+export const loopJob = (id, query = '') => loop(`/jobs/${encodeURIComponent(id)}${query}`)
+export const loopRetryJob = (id, body = {}) => loopPost(`/jobs/${encodeURIComponent(id)}/retry`, body)
+export const loopCancelJob = (id, body = {}) => loopPost(`/jobs/${encodeURIComponent(id)}/cancel`, body)
 export const loopOntologyVersions = () => loop('/ontology/versions')
 export const loopOntologyVersionDiff = (id) => loop(`/ontology/versions/${encodeURIComponent(id)}/diff`)
 export const loopRollbackOntology = (id, body) => loopPost(`/ontology/versions/${encodeURIComponent(id)}/rollback`, body)
@@ -289,8 +289,8 @@ export const loopAudit = (query = '') => loop(`/audit${query}`)
 export const loopSkills = (query = '') => loop(`/skills${query}`)
 export const loopDeriveSkills = (body) => loopPost('/skills/derive', body)
 export const loopPatchSkill = (id, body) => loopPatch(`/skills/${encodeURIComponent(id)}`, body)
-export const loopExportSkill = (id) => loopPost(`/skills/${encodeURIComponent(id)}/export`)
-export const loopRejectSkill = (id) => loopPost(`/skills/${encodeURIComponent(id)}/reject`)
+export const loopExportSkill = (id, body = {}) => loopPost(`/skills/${encodeURIComponent(id)}/export`, body)
+export const loopRejectSkill = (id, body = {}) => loopPost(`/skills/${encodeURIComponent(id)}/reject`, body)
 
 /* 图 / 搜索 */
 export const loopGraph = (query = '') => loop(`/graph${query}`)

@@ -1,5 +1,6 @@
 // toolbar.js — 底栏：流动/自转/视角/重置/视觉设置/完整/最新状态/退出登录
 import { icons } from '../ui/icons.js'
+import { esc } from '../util.js'
 
 export function mount(el, data, handlers = {}) {
   el.innerHTML = `
@@ -15,7 +16,7 @@ export function mount(el, data, handlers = {}) {
       <button class="tb-btn ghost" type="button" data-act="refresh">${icons.activity}<span>最新状态</span></button>
       <button class="tb-btn ghost" type="button" data-act="logout">${icons.logout}<span>退出登录</span></button>
     </div>
-    <div class="bottom-note">${(data.footer && data.footer.note) || '无位置隐私记录、敏感内容，完全为本地系统。'}</div>`
+    <div class="bottom-note">${esc((data.footer && data.footer.note) || '无位置隐私记录、敏感内容，完全为本地系统。')}</div>`
 
   const btn = (act) => el.querySelector(`[data-act="${act}"]`)
   let flow = true

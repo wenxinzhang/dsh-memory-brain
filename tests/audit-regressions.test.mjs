@@ -100,7 +100,7 @@ test('rule evaluation reads the selected object current state from the database'
 test('an unknown mandatory rule prevents the affected action', async t => {
   const f = fixture(); t.after(() => f.close()); insertRule(f)
   const result = await f.rt.checkAction({ action: { type: 'delete', target: 'delete' } })
-  assert.equal(result.result, 'blocked')
+  assert.equal(result.result, 'pending_authorization')
   assert.equal(result.executed, false)
   const unrelated = await f.rt.checkAction({ action: { type: 'read', target: 'read' } })
   assert.equal(unrelated.result, 'no_applicable_action')

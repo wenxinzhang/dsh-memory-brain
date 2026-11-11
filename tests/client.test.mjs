@@ -179,9 +179,9 @@ test('choosing off persists the backend scope before changing the UI', async () 
   assert.ok(requests.some(r=>r.path.includes('/scope') && r.body?.mode==='off' && r.body.conversation_id==='s'))
 })
 
-test('ignore targets the server current turn instead of a boolean flag', async () => {
+test('ignore during a running turn targets the server current turn instead of a boolean flag', async () => {
   const requests=[]
-  const api=await probe({fetch:async(path,init={})=>{requests.push({path,body:init.body && JSON.parse(init.body)});return {ok:true,json:async()=>({ok:true,scope:{mode:'auto',current_turn:7}})}}})
+  const api=await probe({fetch:async(path,init={})=>{requests.push({path,body:init.body && JSON.parse(init.body)});return {ok:true,json:async()=>({ok:true,scope:{mode:'auto',current_turn:7,turn_active:true}})}}})
   const view=api.views.get('memory-chat')({sessionId:'s'})
   await elements(view).find(node=>node.args[0]==='button' && node.args[2]==='仅本轮忽略').args[1].onClick()
   const ignored=requests.find(r=>r.body?.ignored_by_turn)

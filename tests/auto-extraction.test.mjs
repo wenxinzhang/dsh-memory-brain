@@ -110,7 +110,7 @@ test('a queued chat turn resumes after a runtime restart using its persisted mod
 })
 
 test('batch retries of an automatic chat keep its captured model instead of a REST fallback',async t=>{
- const f=fixture({loopWorker:true,loopWorkerIntervalMs:40});t.after(()=>f.close())
+ const f=fixture({loopWorker:true,loopWorkerIntervalMs:40,loopJobMaxAttempts:1});t.after(()=>f.close())
  let attempts=0;f.runtime.setChatExtractionModel(async()=>{attempts++;if(attempts===1)throw new Error('temporary host failure');return '{"memories":[]}'})
  const captured=f.runtime.captureChatTurn({conversation_id:'retry',turn_id:1,modelSelection:{provider:'p',model:'captured-model'},messages:[{role:'user',content:'以后先给结论'}]})
  let job
